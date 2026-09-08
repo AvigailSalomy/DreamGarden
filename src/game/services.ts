@@ -3,6 +3,7 @@ import type { GameEvents } from "../core/events";
 import { SaveService } from "../core/SaveService";
 import { EconomyService } from "../core/EconomyService";
 import { ProgressionService } from "../core/ProgressionService";
+import { RequestsService } from "../core/RequestsService";
 import { CATALOG } from "../data/objects";
 import { SAVE_KEY } from "./config";
 
@@ -19,6 +20,7 @@ export const bus = new Emitter<GameEvents>();
 export const save = new SaveService();
 export const economy = new EconomyService(save, bus);
 export const progression = new ProgressionService(save, economy, bus, CATALOG);
+export const requests = new RequestsService(save, economy, bus, CATALOG);
 
 /** True when the player has anything worth continuing (unlocked objects, coins, or a puzzle in progress). */
 export function hasProgress(): boolean {
@@ -26,7 +28,8 @@ export function hasProgress(): boolean {
   return (
     s.currentTaskIndex > 0 ||
     s.coins > 0 ||
-    Object.values(s.objects).some((o) => o.puzzles_completed > 0 || o.is_unlocked)
+    Object.values(s.objects).some((o) => o.puzzles_completed > 0 || o.is_unlocked) ||
+    Object.values(s.requests).some((ids) => ids.length > 0)
   );
 }
 

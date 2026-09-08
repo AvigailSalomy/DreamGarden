@@ -2,7 +2,8 @@ import Phaser from "phaser";
 import { HORIZON, START_FOCUS, WORLD_HEIGHT, WORLD_WIDTH } from "../game/config";
 import { COLORS } from "../ui/theme";
 import { makeIconButton } from "../ui/hit";
-import { bus, progression, save } from "../game/services";
+import { bus, progression, requests, save } from "../game/services";
+import { CATALOG } from "../data/objects";
 import { CameraController } from "../world/CameraController";
 import { GardenObjectView } from "../world/GardenObjectView";
 import { RegionOverlay, addDormantVeil } from "../world/RegionOverlay";
@@ -10,7 +11,7 @@ import type { RegionRect } from "../world/RegionOverlay";
 import { IdleBehavior } from "../behavior/IdleBehavior";
 import { RevealSequencer } from "../reveal/RevealSequencer";
 import type { RevealHost } from "../reveal/types";
-import { ambientFireflies } from "../fx/Particles";
+import { ambientFireflies, sparkleBurst } from "../fx/Particles";
 import { Sfx } from "../fx/Sfx";
 import type { GardenObjectDef } from "../data/types";
 import type { UIScene } from "./UIScene";
@@ -62,6 +63,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private taskGhost?: Phaser.GameObjects.Image;
   private taskFootprint?: Phaser.GameObjects.Graphics;
   private pendingUnlockId: string | null = null;
+  private pendingWorldEffects: Array<{ objectId: string; requestId: string }> = [];
   private offFns: Array<() => void> = [];
   private flowBusy = false;
   private letterUp = false;
@@ -101,10 +103,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.reveal = new RevealSequencer(this);
 
     this.spawnSavedObjects();
+    this.applyPurchasedWorldEffectsInstant();
     this.updateTaskMarker();
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.wireEvents();
+    this.events.on(Phaser.Scenes.Events.RESUME, () => this.flushWorldEffects());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
 
     this.time.delayedCall(80, () => this.beginEntryFlow());
@@ -199,6 +203,17 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, this.tourSkipped ? 500 : 760, 1);
   }
 
+  /**
+   * Launch the Requests screen for `objectId`, pausing Garden underneath — same
+   * overlay contract as Puzzle/Letter. Unguarded (unlike the `requests:open` bus
+   * handler) so it's safe to call from inside an already-`flowBusy` async chain.
+   */
+  private openRequestsScreen(objectId: string): void {
+    this.camera.disable();
+    this.scene.launch("Requests", { objectId });
+    this.scene.pause();
+  }
+
   /** Guide the camera to a restoration's area, present its letter, then hand back control. */
   private async presentLetterThenActivate(objectId: string): Promise<void> {
     const def = progression.def(objectId);
@@ -231,6 +246,11 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.letterUp = false;
 
     this.updateTaskMarker();
+    if (!requests.isComplete(objectId)) {
+      // the new core loop: letter -> Requests screen, before the puzzle is ever reachable
+      this.openRequestsScreen(objectId);
+      return;
+    }
     this.camera.enable();
     this.ui.setRevealing(false);
     this.ui.setTaskFromProgression();
@@ -496,6 +516,53 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     }
   }
 
+  /* ---------------- requests world effects ---------------- */
+
+  /** Reload correctness: place every already-purchased request's prop instantly, no animation. */
+  private applyPurchasedWorldEffectsInstant(): void {
+    for (const def of CATALOG) {
+      for (const requestId of requests.purchasedIds(def.id)) {
+        this.spawnWorldEffect(def.id, requestId, false);
+      }
+    }
+  }
+
+  private spawnWorldEffect(objectId: string, requestId: string, animate: boolean): void {
+    const def = progression.def(objectId);
+    const req = def?.requests.find((r) => r.id === requestId);
+    if (!def || !req) return;
+
+    const x = def.garden_position.x + req.worldOffset.x;
+    const y = def.garden_position.y + req.worldOffset.y;
+    const scale = req.worldScale ?? 1;
+    const img = this.add
+      .image(x, y, req.worldSprite)
+      .setOrigin(0.5, 1)
+      .setScale(scale)
+      .setDepth(y);
+
+    if (!animate) return;
+
+    img.setScale(0).setAlpha(0);
+    this.tweens.add({
+      targets: img,
+      scale,
+      alpha: 1,
+      duration: 420,
+      ease: "Back.easeOut",
+    });
+    sparkleBurst(this, x, y - 20, 14, 44);
+    Sfx.sparkle();
+  }
+
+  /** Queued while paused (Requests screen open); applied with animation once we regain control. */
+  private flushWorldEffects(): void {
+    if (!this.pendingWorldEffects.length) return;
+    const queued = this.pendingWorldEffects;
+    this.pendingWorldEffects = [];
+    for (const { objectId, requestId } of queued) this.spawnWorldEffect(objectId, requestId, true);
+  }
+
   spawnObjectView(def: GardenObjectDef, startHidden: boolean): GardenObjectView {
     let view = this.views.get(def.id);
     if (!view) {
@@ -637,6 +704,28 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         this.camera.disable();
         this.scene.launch("Puzzle", { objectId });
         this.scene.pause();
+      }),
+    );
+
+    this.offFns.push(
+      bus.on("requests:open", ({ objectId }) => {
+        if (this.reveal.isRunning || this.flowBusy) return;
+        this.openRequestsScreen(objectId);
+      }),
+    );
+
+    this.offFns.push(
+      bus.on("requests:closed", () => {
+        this.camera.enable();
+        this.ui.setTaskFromProgression();
+        this.ui.showCard();
+      }),
+    );
+
+    this.offFns.push(
+      bus.on("request:purchased", (p) => {
+        // Garden may be paused (Requests screen open) — queue, apply+animate on resume.
+        this.pendingWorldEffects.push(p);
       }),
     );
 

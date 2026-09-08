@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { SaveService, freshSave, migrate } from "../src/core/SaveService";
-import { SAVE_VERSION } from "../src/game/config";
+import { SAVE_VERSION, STARTING_COINS } from "../src/game/config";
 
 const KEY = "dreamgarden.save.test";
 
@@ -11,12 +11,14 @@ describe("freshSave", () => {
     const s = freshSave();
     expect(s).toMatchObject({
       saveVersion: SAVE_VERSION,
-      coins: 0,
+      coins: STARTING_COINS,
       currentTaskIndex: 0,
       introSeen: false,
       openingGardenTourSeen: false,
       lettersSeen: {},
       objects: {},
+      requests: {},
+      minigame: {},
     });
     expect(s.stats.puzzlesSolved).toBe(0);
   });
@@ -33,8 +35,37 @@ describe("migrate", () => {
   });
 
   it("returns a fresh save for junk input", () => {
-    expect(migrate(null).coins).toBe(0);
-    expect(migrate("nope" as unknown).coins).toBe(0);
+    expect(migrate(null).coins).toBe(STARTING_COINS);
+    expect(migrate("nope" as unknown).coins).toBe(STARTING_COINS);
+  });
+
+  it("backfills requests/minigame from a pre-Milestone-4 (v2) blob without dropping other data", () => {
+    const v2 = {
+      saveVersion: 2,
+      coins: 20,
+      currentTaskIndex: 1,
+      introSeen: true,
+      openingGardenTourSeen: true,
+      lettersSeen: { rabbit: true },
+      objects: { rabbit: { puzzles_completed: 1, is_unlocked: true } },
+      stats: { puzzlesSolved: 1, startedAt: 1, lastPlayed: 2 },
+    };
+    const m = migrate(v2);
+    expect(m.coins).toBe(20);
+    expect(m.objects.rabbit.is_unlocked).toBe(true);
+    expect(m.requests).toEqual({});
+    expect(m.minigame).toEqual({});
+    expect(m.saveVersion).toBe(SAVE_VERSION);
+  });
+
+  it("preserves requests/minigame already present in the blob", () => {
+    const m = migrate({
+      coins: 10,
+      requests: { rabbit: ["carrot_basket"] },
+      minigame: { rabbit: { level: 2, roundsCompleted: 1 } },
+    });
+    expect(m.requests).toEqual({ rabbit: ["carrot_basket"] });
+    expect(m.minigame).toEqual({ rabbit: { level: 2, roundsCompleted: 1 } });
   });
 
   it("a Milestone-2 save with no tour/letters fields loads without crashing", () => {
@@ -79,26 +110,32 @@ describe("SaveService", () => {
   it("recovers from a corrupt blob", () => {
     localStorage.setItem(KEY, "{not json");
     const s = new SaveService(KEY);
-    expect(s.state.coins).toBe(0);
+    expect(s.state.coins).toBe(STARTING_COINS);
   });
 
-  it("reset wipes every DreamGarden field", () => {
+  it("reset wipes every DreamGarden field, including requests/minigame", () => {
     const s = new SaveService(KEY);
     s.state.coins = 99;
     s.state.openingGardenTourSeen = true;
     s.state.lettersSeen = { rabbit: true, wildflowers: true };
     s.state.objects.rabbit = { puzzles_completed: 1, is_unlocked: true };
+    s.state.requests.rabbit = ["carrot_basket", "soft_hay"];
+    s.state.minigame.rabbit = { level: 3, roundsCompleted: 2 };
     s.saveNow();
 
     s.reset();
-    expect(s.state.coins).toBe(0);
+    expect(s.state.coins).toBe(STARTING_COINS);
     expect(s.state.openingGardenTourSeen).toBe(false);
     expect(s.state.lettersSeen).toEqual({});
     expect(s.state.objects).toEqual({});
+    expect(s.state.requests).toEqual({});
+    expect(s.state.minigame).toEqual({});
 
     const reloaded = new SaveService(KEY);
-    expect(reloaded.state.coins).toBe(0);
+    expect(reloaded.state.coins).toBe(STARTING_COINS);
     expect(reloaded.state.openingGardenTourSeen).toBe(false);
     expect(reloaded.state.lettersSeen).toEqual({});
+    expect(reloaded.state.requests).toEqual({});
+    expect(reloaded.state.minigame).toEqual({});
   });
 });

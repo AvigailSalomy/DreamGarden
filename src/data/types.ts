@@ -52,6 +52,32 @@ export interface LetterConfig {
   button?: string;
 }
 
+/**
+ * One purchasable item in an object's Requests screen. Buying it advances the
+ * object's request-progress bar by one segment and places `worldSprite` in the
+ * garden at `garden_position + worldOffset` (see RequestsService/GardenScene).
+ */
+export interface RequestDef {
+  id: string;
+  label: string;
+  /** Texture key for the request-card icon. */
+  icon: string;
+  cost: number;
+  /** Display order within the object's Requests screen. */
+  order: number;
+  /** Texture key of the prop that appears in the garden once purchased. */
+  worldSprite: string;
+  worldOffset: { x: number; y: number };
+  worldScale?: number;
+}
+
+/** One catchable item in a Catch & Collect mini-game item pool. */
+export interface MiniGameItemDef {
+  id: string;
+  icon: string;
+  label: string;
+}
+
 export interface GardenObjectDef {
   id: string;
   name: string;
@@ -84,6 +110,11 @@ export interface GardenObjectDef {
 
   story_text: string;
   unlock_toast?: string;
+
+  /** Purchasable requests that must ALL be bought before the puzzle unlocks. */
+  requests: RequestDef[];
+  /** Catch & Collect item pool used while this object is the active task. */
+  miniGamePool: MiniGameItemDef[];
 }
 
 /* ---------- persisted save ---------- */
@@ -103,11 +134,20 @@ export interface SaveState {
   /** Per-object: has the player opened its task letter yet. */
   lettersSeen: Record<string, boolean>;
   objects: Record<string, ObjectProgress>;
+  /** Per-object: ids of purchased requests. */
+  requests: Record<string, string[]>;
+  /** Per-object: Catch & Collect progress. */
+  minigame: Record<string, MiniGameProgress>;
   stats: {
     puzzlesSolved: number;
     startedAt: number;
     lastPlayed: number;
   };
+}
+
+export interface MiniGameProgress {
+  level: number;
+  roundsCompleted: number;
 }
 
 /* ---------- runtime view-model ---------- */
@@ -118,4 +158,24 @@ export interface CurrentTaskVM {
   required: number;
   nextGrid: GridSize;
   segments: boolean[];
+}
+
+export interface RequestsVM {
+  object: GardenObjectDef;
+  purchased: Set<string>;
+  completed: number;
+  total: number;
+  isComplete: boolean;
+}
+
+/** One goal within a Catch & Collect level: catch `target` of `itemId`. */
+export interface LevelGoal {
+  itemId: string;
+  target: number;
+}
+
+export interface LevelDef {
+  level: number;
+  goals: LevelGoal[];
+  reward: number;
 }

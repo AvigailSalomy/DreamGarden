@@ -1,16 +1,18 @@
-import { SAVE_KEY, SAVE_VERSION } from "../game/config";
+import { SAVE_KEY, SAVE_VERSION, STARTING_COINS } from "../game/config";
 import type { SaveState } from "../data/types";
 
 export function freshSave(): SaveState {
   const now = Date.now();
   return {
     saveVersion: SAVE_VERSION,
-    coins: 0,
+    coins: STARTING_COINS,
     currentTaskIndex: 0,
     introSeen: false,
     openingGardenTourSeen: false,
     lettersSeen: {},
     objects: {},
+    requests: {},
+    minigame: {},
     stats: { puzzlesSolved: 0, startedAt: now, lastPlayed: now },
   };
 }
@@ -41,6 +43,8 @@ export function migrate(data: unknown): SaveState {
     lettersSeen:
       d.lettersSeen && typeof d.lettersSeen === "object" ? d.lettersSeen : {},
     objects,
+    requests: d.requests && typeof d.requests === "object" ? d.requests : {},
+    minigame: d.minigame && typeof d.minigame === "object" ? d.minigame : {},
     stats: { ...base.stats, ...(d.stats ?? {}) },
   };
 }

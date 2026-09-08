@@ -59,6 +59,31 @@ export class PreloadScene extends Phaser.Scene {
     svg("envelope", 420, 310);
     svg("letter_paper", 460, 560);
 
+    // requests economy — item icons (request cards + mini-game pool)
+    svg("basket", 160, 120);
+    svg("carrot", 64, 64);
+    svg("clover", 64, 64);
+    svg("apple", 64, 64);
+    svg("hay", 64, 64);
+    svg("seed", 64, 64);
+    svg("flower_petals", 64, 64);
+    svg("water_drop", 64, 64);
+    svg("leaf", 64, 64);
+    svg("berry", 64, 64);
+    svg("feather", 64, 64);
+    svg("star_special", 64, 64);
+
+    // requests economy — world-state props (one per purchasable request)
+    svg("carrot_basket_prop", 160, 130);
+    svg("soft_hay_prop", 180, 110);
+    svg("clover_patch_prop", 170, 100);
+    svg("fresh_soil_prop", 180, 90);
+    svg("flower_seeds_prop", 170, 110);
+    svg("watering_supplies_prop", 150, 150);
+    svg("bird_seeds_prop", 160, 100);
+    svg("water_dish_prop", 150, 90);
+    svg("cozy_perch_prop", 170, 130);
+
     // fx + ui
     svg("spark", 48, 48);
     svg("glow", 256, 256);

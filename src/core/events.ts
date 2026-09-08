@@ -16,4 +16,8 @@ export interface GameEvents {
   "letter:done": { objectId: string };
   "task:changed": { objectId: string | null };
   "coins:changed": { total: number; delta: number; reason: string };
+  "requests:open": { objectId: string };
+  "requests:closed": { objectId: string };
+  "request:purchased": { objectId: string; requestId: string };
+  "minigame:completed": { objectId: string; level: number; coinsEarned: number };
 }

@@ -4,7 +4,7 @@ import { makePanel, makePill } from "../ui/Panel";
 import { Button } from "../ui/Button";
 import { confirmModal, settingsModal } from "../ui/Modal";
 import { safeInsets } from "../util/safeArea";
-import { bus, economy, progression, resetGarden } from "../game/services";
+import { bus, economy, progression, requests, resetGarden } from "../game/services";
 import { Sfx } from "../fx/Sfx";
 
 /** Screen-fixed HUD. Its camera never pans or zooms, so it stays put over the garden. */
@@ -50,6 +50,7 @@ export class UIScene extends Phaser.Scene {
       }),
     );
     this.offFns.push(bus.on("progress:updated", () => this.drawPips()));
+    this.offFns.push(bus.on("requests:closed", () => this.setTaskFromProgression()));
     this.offFns.push(
       bus.on("reveal:done", () => {
         this.revealing = false;
@@ -316,7 +317,11 @@ export class UIScene extends Phaser.Scene {
     const task = progression.currentTask;
     if (!task || this.revealing || progression.isUnlocked(task.id)) return;
     this.hideCard();
-    bus.emit("puzzle:start", { objectId: task.id });
+    if (requests.isComplete(task.id)) {
+      bus.emit("puzzle:start", { objectId: task.id });
+    } else {
+      bus.emit("requests:open", { objectId: task.id });
+    }
   }
 
   setTaskFromProgression(): void {
@@ -327,7 +332,7 @@ export class UIScene extends Phaser.Scene {
       this.cardStory.setText("Every friend has come home. Wander and enjoy it a while.");
       this.cardThumb.setTexture("rabbit").setDisplaySize(this.thumbSize, this.thumbSize).setTint(0x4a3f5c).setAlpha(0.22);
       this.cardThumbQ.setAlpha(0.35);
-      this.playBtn.setEnabled(false).stopPulse();
+      this.playBtn.setLabel("Play").setEnabled(false).stopPulse();
       this.drawPips(0, 0);
       return;
     }
@@ -345,6 +350,13 @@ export class UIScene extends Phaser.Scene {
     this.playBtn.setEnabled(!unlocked && !this.revealing);
     if (!unlocked && !this.revealing) this.playBtn.startPulse();
     else this.playBtn.stopPulse();
+    if (!unlocked) {
+      this.playBtn.setLabel(
+        requests.isComplete(vm.object.id)
+          ? `Complete ${shortName(vm.object.name)}'s Puzzle`
+          : `${shortName(vm.object.name)}'s Requests`,
+      );
+    }
     this.drawPips(vm.completed, vm.required);
   }
 

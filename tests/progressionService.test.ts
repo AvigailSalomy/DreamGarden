@@ -6,6 +6,7 @@ import { EconomyService } from "../src/core/EconomyService";
 import { ProgressionService } from "../src/core/ProgressionService";
 import { CATALOG } from "../src/data/objects";
 import { DEFAULT_PROGRESSION } from "../src/data/progression";
+import { STARTING_COINS } from "../src/game/config";
 
 const KEY = "dreamgarden.save.progtest";
 const BONUS = DEFAULT_PROGRESSION.perPuzzleBonus;
@@ -46,7 +47,7 @@ describe("ProgressionService — Milestone 3 order: Rabbit → Wildflowers → S
     expect(progression.isUnlocked("rabbit")).toBe(true);
     expect(progression.currentTask?.id).toBe("wildflowers");
     expect(progression.isGardenComplete()).toBe(false);
-    expect(economy.coins).toBe(BONUS + 15);
+    expect(economy.coins).toBe(STARTING_COINS + BONUS + 15);
   });
 
   it("wildflowers unlock (reward 30) then advances to the songbird", () => {
@@ -57,7 +58,7 @@ describe("ProgressionService — Milestone 3 order: Rabbit → Wildflowers → S
     expect(progression.isUnlocked("wildflowers")).toBe(true);
     expect(progression.currentTask?.id).toBe("bird");
     // rabbit: 5+15, wildflowers: 5+30
-    expect(economy.coins).toBe(BONUS + 15 + BONUS + 30);
+    expect(economy.coins).toBe(STARTING_COINS + BONUS + 15 + BONUS + 30);
   });
 
   it("songbird unlock completes the garden", () => {
@@ -73,7 +74,7 @@ describe("ProgressionService — Milestone 3 order: Rabbit → Wildflowers → S
     ]);
     expect(progression.currentTask).toBeNull();
     expect(progression.isGardenComplete()).toBe(true);
-    expect(economy.coins).toBe(3 * BONUS + 15 + 30 + 15);
+    expect(economy.coins).toBe(STARTING_COINS + 3 * BONUS + 15 + 30 + 15);
   });
 
   it("emits object:unlock for each restoration in order", () => {

@@ -13,7 +13,10 @@ export const WORLD_HEIGHT = 2400;
 export const HORIZON = 460;
 
 export const SAVE_KEY = "dreamgarden.save.v1";
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
+
+/** Fresh-game starting coin balance — enough to buy the first Rabbit request immediately. */
+export const STARTING_COINS = 60;
 
 /** World point the camera centres on when the garden opens (the rabbit meadow). */
 export const START_FOCUS = { x: 900, y: 1500 };

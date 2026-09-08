@@ -41,6 +41,42 @@ export const RABBIT: GardenObjectDef = {
   story_text:
     "Something small and gentle waits at the meadow's edge, hoping this garden could feel like home.",
   unlock_toast: "Nibs hops into the meadow and settles in.",
+
+  requests: [
+    {
+      id: "carrot_basket",
+      label: "Carrot Basket",
+      icon: "carrot",
+      cost: 50,
+      order: 0,
+      worldSprite: "carrot_basket_prop",
+      worldOffset: { x: -150, y: 30 },
+    },
+    {
+      id: "soft_hay",
+      label: "Soft Hay",
+      icon: "hay",
+      cost: 70,
+      order: 1,
+      worldSprite: "soft_hay_prop",
+      worldOffset: { x: 140, y: 20 },
+    },
+    {
+      id: "clover_patch",
+      label: "Clover Patch",
+      icon: "clover",
+      cost: 90,
+      order: 2,
+      worldSprite: "clover_patch_prop",
+      worldOffset: { x: 0, y: -70 },
+    },
+  ],
+  miniGamePool: [
+    { id: "carrot", icon: "carrot", label: "Carrot" },
+    { id: "clover", icon: "clover", label: "Clover" },
+    { id: "apple", icon: "apple", label: "Apple" },
+    { id: "hay", icon: "hay", label: "Hay" },
+  ],
 };
 
 export const WILDFLOWERS: GardenObjectDef = {
@@ -78,6 +114,42 @@ export const WILDFLOWERS: GardenObjectDef = {
   story_text:
     "The flower bed is dry and grey, but the roots underneath still remember how to bloom.",
   unlock_toast: "The wildflower bed bursts into pink, gold and violet.",
+
+  requests: [
+    {
+      id: "fresh_soil",
+      label: "Fresh Soil",
+      icon: "fresh_soil_prop",
+      cost: 40,
+      order: 0,
+      worldSprite: "fresh_soil_prop",
+      worldOffset: { x: -30, y: 10 },
+    },
+    {
+      id: "flower_seeds",
+      label: "Flower Seeds",
+      icon: "flower_seeds_prop",
+      cost: 55,
+      order: 1,
+      worldSprite: "flower_seeds_prop",
+      worldOffset: { x: 40, y: 0 },
+    },
+    {
+      id: "watering_supplies",
+      label: "Watering Supplies",
+      icon: "watering_supplies_prop",
+      cost: 70,
+      order: 2,
+      worldSprite: "watering_supplies_prop",
+      worldOffset: { x: 0, y: 50 },
+    },
+  ],
+  miniGamePool: [
+    { id: "seed", icon: "seed", label: "Seed" },
+    { id: "flower_petals", icon: "flower_petals", label: "Flower Petals" },
+    { id: "water_drop", icon: "water_drop", label: "Water Drop" },
+    { id: "leaf", icon: "leaf", label: "Leaf" },
+  ],
 };
 
 export const BIRD: GardenObjectDef = {
@@ -116,6 +188,42 @@ export const BIRD: GardenObjectDef = {
   story_text:
     "The fence rail by the archway has held no song for years. Something small still wants to sing there.",
   unlock_toast: "Pip glides down to the fence rail and tries a first note.",
+
+  requests: [
+    {
+      id: "bird_seeds",
+      label: "Bird Seeds",
+      icon: "bird_seeds_prop",
+      cost: 45,
+      order: 0,
+      worldSprite: "bird_seeds_prop",
+      worldOffset: { x: -90, y: 90 },
+    },
+    {
+      id: "water_dish",
+      label: "Water Dish",
+      icon: "water_dish_prop",
+      cost: 60,
+      order: 1,
+      worldSprite: "water_dish_prop",
+      worldOffset: { x: 70, y: 100 },
+    },
+    {
+      id: "cozy_perch",
+      label: "Cozy Perch",
+      icon: "cozy_perch_prop",
+      cost: 75,
+      order: 2,
+      worldSprite: "cozy_perch_prop",
+      worldOffset: { x: -10, y: -40 },
+    },
+  ],
+  miniGamePool: [
+    { id: "seed", icon: "seed", label: "Seed" },
+    { id: "berry", icon: "berry", label: "Berry" },
+    { id: "feather", icon: "feather", label: "Feather" },
+    { id: "leaf", icon: "leaf", label: "Leaf" },
+  ],
 };
 
 export const CATALOG: GardenObjectDef[] = [RABBIT, WILDFLOWERS, BIRD];
