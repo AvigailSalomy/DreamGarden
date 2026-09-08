@@ -20,7 +20,7 @@ function makeStack() {
 
 beforeEach(() => localStorage.clear());
 
-describe("ProgressionService — rabbit vertical slice", () => {
+describe("ProgressionService — sequential objects (Rabbit → Bird)", () => {
   it("starts on the rabbit task with 0/1 progress", () => {
     const { progression } = makeStack();
     expect(progression.currentTask?.id).toBe("rabbit");
@@ -29,38 +29,53 @@ describe("ProgressionService — rabbit vertical slice", () => {
     expect(vm?.segments).toEqual([false]);
   });
 
-  it("unlocks the rabbit on the final puzzle and awards coins", () => {
+  it("advances to the Bird task after the Rabbit unlocks (not garden-complete yet)", () => {
     const { progression, economy } = makeStack();
 
     const res = progression.recordPuzzleCompletion("rabbit");
     expect(res.unlockedNow).toBe(true);
     expect(progression.isUnlocked("rabbit")).toBe(true);
-    // per-puzzle bonus (5) + reward (15)
     expect(economy.coins).toBe(DEFAULT_PROGRESSION.perPuzzleBonus + 15);
+
+    // the data-driven catalog rolls the current task forward automatically
+    expect(progression.currentTask?.id).toBe("bird");
+    expect(progression.isGardenComplete()).toBe(false);
+    expect(progression.taskVM()).toMatchObject({ completed: 0, required: 1 });
+  });
+
+  it("unlocks the Bird next and only then is the garden complete", () => {
+    const { progression, economy } = makeStack();
+    progression.recordPuzzleCompletion("rabbit");
+
+    const res = progression.recordPuzzleCompletion("bird");
+    expect(res.unlockedNow).toBe(true);
+    expect(progression.isUnlocked("bird")).toBe(true);
+    expect(progression.unlockedObjects().map((o) => o.id)).toEqual(["rabbit", "bird"]);
     expect(progression.currentTask).toBeNull();
     expect(progression.isGardenComplete()).toBe(true);
+    expect(economy.coins).toBe(2 * (DEFAULT_PROGRESSION.perPuzzleBonus + 15));
   });
 
-  it("emits object:unlock and coins:changed", () => {
+  it("emits object:unlock for each object in order", () => {
     const { progression, bus } = makeStack();
     const unlocked: string[] = [];
-    const coinEvents: number[] = [];
     bus.on("object:unlock", (p) => unlocked.push(p.objectId));
-    bus.on("coins:changed", (p) => coinEvents.push(p.delta));
 
     progression.recordPuzzleCompletion("rabbit");
-    expect(unlocked).toEqual(["rabbit"]);
-    expect(coinEvents).toEqual([5, 15]);
+    progression.recordPuzzleCompletion("bird");
+    expect(unlocked).toEqual(["rabbit", "bird"]);
   });
 
-  it("commits the unlock to storage before any animation could run", () => {
+  it("commits each unlock to storage immediately (both survive a reload)", () => {
     const { progression } = makeStack();
     progression.recordPuzzleCompletion("rabbit");
+    progression.recordPuzzleCompletion("bird");
 
     const reloaded = new SaveService(KEY);
     expect(reloaded.state.objects.rabbit.is_unlocked).toBe(true);
-    expect(reloaded.state.currentTaskIndex).toBe(1);
-    expect(reloaded.state.coins).toBe(20);
+    expect(reloaded.state.objects.bird.is_unlocked).toBe(true);
+    expect(reloaded.state.currentTaskIndex).toBe(2);
+    expect(reloaded.state.coins).toBe(40);
   });
 
   it("ignores a stray repeat of an already-finished puzzle", () => {

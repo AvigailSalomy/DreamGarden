@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { clampScroll, decayVelocity, isDragGesture } from "../src/world/cameraMath";
+import {
+  ZOOM_MAX,
+  ZOOM_MIN,
+  clampScroll,
+  clampZoom,
+  decayVelocity,
+  isDragGesture,
+  zoomAroundPoint,
+} from "../src/world/cameraMath";
 
 const view = { width: 720, height: 1280, zoom: 1 };
 const world = { w: 2160, h: 1680 };
@@ -54,5 +62,38 @@ describe("isDragGesture", () => {
   });
   it("is a drag when held long", () => {
     expect(isDragGesture(1, 1, 500)).toBe(true);
+  });
+});
+
+describe("clampZoom", () => {
+  it("keeps zoom in the comfortable range", () => {
+    expect(clampZoom(0.2)).toBe(ZOOM_MIN);
+    expect(clampZoom(9)).toBe(ZOOM_MAX);
+    expect(clampZoom(1.1)).toBe(1.1);
+  });
+  it("range is roughly 0.85 .. 1.5", () => {
+    expect(ZOOM_MIN).toBeCloseTo(0.85);
+    expect(ZOOM_MAX).toBeGreaterThanOrEqual(1.35);
+    expect(ZOOM_MAX).toBeLessThanOrEqual(1.6);
+  });
+});
+
+describe("zoomAroundPoint", () => {
+  const v = { width: 400, height: 800, zoom: 1, scrollX: 100, scrollY: 200 };
+
+  it("keeps the world point under the focal pixel fixed", () => {
+    const focalX = 150;
+    const focalY = 300;
+    const worldBefore = { x: v.scrollX + focalX / v.zoom, y: v.scrollY + focalY / v.zoom };
+    const next = zoomAroundPoint(v, focalX, focalY, 1.4);
+    const worldAfter = { x: next.scrollX + focalX / 1.4, y: next.scrollY + focalY / 1.4 };
+    expect(worldAfter.x).toBeCloseTo(worldBefore.x);
+    expect(worldAfter.y).toBeCloseTo(worldBefore.y);
+  });
+
+  it("no zoom change means no scroll change", () => {
+    const next = zoomAroundPoint(v, 200, 400, 1);
+    expect(next.scrollX).toBeCloseTo(v.scrollX);
+    expect(next.scrollY).toBeCloseTo(v.scrollY);
   });
 });

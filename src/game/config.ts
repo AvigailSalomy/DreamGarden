@@ -1,16 +1,22 @@
-/** Global tunables. Design frame is portrait; the world is larger and pans by drag. */
+/**
+ * Global tunables. The game runs full-screen (Phaser.Scale.RESIZE); DESIGN_* is only
+ * a nominal portrait reference for composing UI. The world is much larger than any
+ * viewport and is explored by drag-pan + pinch/wheel zoom.
+ */
 export const DESIGN_WIDTH = 720;
 export const DESIGN_HEIGHT = 1280;
 
-export const WORLD_WIDTH = 2160;
-export const WORLD_HEIGHT = 1680;
+export const WORLD_WIDTH = 3200;
+export const WORLD_HEIGHT = 2400;
+
+/** Ground horizon in world Y (sky/hills above, garden below). */
+export const HORIZON = 460;
 
 export const SAVE_KEY = "dreamgarden.save.v1";
 export const SAVE_VERSION = 1;
 
-/** Where the camera rests when the garden first opens (top-left scroll, will be clamped).
- *  Kept high enough that sky + hills frame the top of the view. */
-export const START_SCROLL = { x: 150, y: 110 };
+/** World point the camera centres on when the garden opens (the rabbit meadow). */
+export const START_FOCUS = { x: 900, y: 1500 };
 
 export const IS_TOUCH =
   typeof window !== "undefined" &&

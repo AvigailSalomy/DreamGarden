@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import type { GardenObjectView } from "../world/GardenObjectView";
-import type { MovementBounds } from "../data/types";
+import type { IdleBehaviorId, MovementBounds } from "../data/types";
 
 type State = "idle" | "look" | "hop" | "rest";
 
@@ -23,8 +23,10 @@ function pickNext(cur: State, rng: () => number): State {
 }
 
 /**
- * Believable rabbit idle loop: a tiny weighted state machine with random timers and
- * bounded hops. No pathfinding — just the illusion of life.
+ * Believable idle loop: a tiny weighted state machine with random timers and bounded
+ * movement. No pathfinding — just the illusion of life. Behaviour type tunes the feel:
+ *   rabbit_hop  -> springy arced hops
+ *   bird_ground -> small quick hops + the occasional low "flit" flight
  */
 export class IdleBehavior {
   private state: State = "idle";
@@ -35,14 +37,17 @@ export class IdleBehavior {
   private homeX: number;
   private homeY: number;
   private breatheTween?: Phaser.Tweens.Tween;
+  private readonly bird: boolean;
 
   constructor(
     private scene: Phaser.Scene,
     private view: GardenObjectView,
     private bounds: MovementBounds,
+    type: IdleBehaviorId = "rabbit_hop",
   ) {
     this.homeX = view.x;
     this.homeY = view.y;
+    this.bird = type === "bird_ground";
   }
 
   start(): void {
@@ -143,7 +148,6 @@ export class IdleBehavior {
   }
 
   private doHops(times: number): void {
-    const maxHop = 130;
     this.breatheTween?.pause();
     const finish = () => {
       this.view.body.setScale(1);
@@ -156,6 +160,8 @@ export class IdleBehavior {
         return;
       }
       times--;
+      const flit = this.bird && this.rng() < 0.35;
+      const maxHop = this.bird ? (flit ? 240 : 78) : 130;
       const target = this.randomTargetInBounds();
       const fromX = this.view.x;
       const fromY = this.view.y;
@@ -166,8 +172,8 @@ export class IdleBehavior {
       ty = Phaser.Math.Clamp(ty, this.homeY - (this.bounds.h ?? 160) / 2, this.homeY + (this.bounds.h ?? 160) / 2);
       this.view.faceLeft(tx < fromX);
 
-      const hopHeight = 46 + this.rng() * 26;
-      const dur = 380;
+      const hopHeight = this.bird ? (flit ? 90 + this.rng() * 40 : 14 + this.rng() * 12) : 46 + this.rng() * 26;
+      const dur = this.bird ? (flit ? 460 : 240) : 380;
       const proxy = { t: 0 };
 
       // anticipation squash

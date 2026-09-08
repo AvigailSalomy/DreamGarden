@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640">
+  <defs>
+    <radialGradient id="bgp" cx="0.5" cy="0.42" r="0.72">
+      <stop offset="0" stop-color="#eef1fb"/>
+      <stop offset="0.55" stop-color="#dfe6f4"/>
+      <stop offset="1" stop-color="#cdd9ea"/>
+    </radialGradient>
+    <linearGradient id="pbb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a6bfda"/>
+      <stop offset="1" stop-color="#7f9cc0"/>
+    </linearGradient>
+    <radialGradient id="pbv" cx="0.5" cy="0.5" r="0.62">
+      <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="0.75" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#3f4b6b" stop-opacity="0.22"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="640" height="640" fill="url(#bgp)"/>
+
+  <!-- bokeh so every sliced tile carries detail -->
+  <g fill="#ffffff" opacity="0.22">
+    <circle cx="80" cy="90" r="52"/><circle cx="560" cy="70" r="64"/>
+    <circle cx="600" cy="380" r="44"/><circle cx="44" cy="430" r="56"/>
+    <circle cx="150" cy="600" r="48"/><circle cx="520" cy="580" r="58"/>
+  </g>
+  <g fill="#8fb0d6" opacity="0.18">
+    <circle cx="130" cy="220" r="28"/><circle cx="500" cy="240" r="22"/>
+    <circle cx="470" cy="440" r="32"/><circle cx="170" cy="470" r="20"/>
+  </g>
+
+  <!-- branch + leaves -->
+  <path d="M-20,470 C 160,430 420,440 660,410" stroke="#9c7a58" stroke-width="20" fill="none" stroke-linecap="round"/>
+  <path d="M-20,470 C 160,430 420,440 660,410" stroke="#b08f6b" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <g fill="#8fc77a" stroke="#7bb268" stroke-width="3">
+    <ellipse cx="120" cy="430" rx="26" ry="14" transform="rotate(-24 120 430)"/>
+    <ellipse cx="520" cy="405" rx="26" ry="14" transform="rotate(20 520 405)"/>
+    <ellipse cx="330" cy="452" rx="24" ry="13" transform="rotate(-6 330 452)"/>
+  </g>
+
+  <!-- bird, centred, facing forward-left -->
+  <g transform="translate(320,300)">
+    <ellipse cx="0" cy="182" rx="120" ry="22" fill="#3f4b6b" opacity="0.14"/>
+
+    <!-- tail -->
+    <path d="M70,120 C 150,110 190,70 210,20 C 170,110 130,160 90,150 Z" fill="#7f9cc0" stroke="#6d89ad" stroke-width="4"/>
+    <!-- body -->
+    <path d="M-96,140 C -128,70 -108,-40 -6,-64 C 84,-84 150,-16 150,72
+             C 150,140 84,180 6,180 C -40,180 -78,166 -96,140 Z"
+          fill="url(#pbb)" stroke="#6d89ad" stroke-width="4"/>
+    <!-- belly -->
+    <path d="M-56,130 C -70,60 -50,-24 40,-40 C 100,-52 118,20 110,86
+             C 104,144 40,170 -6,164 C -32,160 -48,150 -56,130 Z" fill="#f4b98c"/>
+    <!-- wing -->
+    <path d="M-10,-40 C 70,-60 130,-20 130,50 C 96,10 40,-4 -10,10 Z"
+          fill="#88a4c7" stroke="#6d89ad" stroke-width="3.5"/>
+    <g stroke="#6d89ad" stroke-width="2.5" opacity="0.6">
+      <path d="M0,-16 C 40,-8 78,6 104,34"/>
+      <path d="M-2,4 C 34,10 66,22 92,44"/>
+    </g>
+    <!-- head -->
+    <circle cx="-40" cy="-72" r="62" fill="url(#pbb)" stroke="#6d89ad" stroke-width="4"/>
+    <path d="M-92,-72 a52,52 0 0 1 52,-52 a52,52 0 0 1 16,3 C -66,-104 -84,-90 -92,-72 Z" fill="#f4b98c"/>
+    <!-- beak -->
+    <path d="M-96,-72 L-150,-80 L-96,-92 Z" fill="#e8a45c" stroke="#c9862f" stroke-width="3"/>
+    <!-- eye -->
+    <circle cx="-58" cy="-80" r="12" fill="#5b4636"/>
+    <circle cx="-62" cy="-85" r="4" fill="#fffdf5"/>
+    <ellipse cx="-46" cy="-56" rx="14" ry="9" fill="#f6c7b0" opacity="0.75"/>
+    <!-- legs -->
+    <path d="M-6,176 l-6,26 M32,176 l6,26" stroke="#c9862f" stroke-width="8" stroke-linecap="round"/>
+
+    <g fill="#fffdf5">
+      <path d="M150,-150 l6,14 14,6 -14,6 -6,14 -6,-14 -14,-6 14,-6 z"/>
+      <path d="M-160,40 l4,10 10,4 -10,4 -4,10 -4,-10 -10,-4 10,-4 z" opacity="0.8"/>
+    </g>
+  </g>
+
+  <rect width="640" height="640" fill="url(#pbv)"/>
+</svg>

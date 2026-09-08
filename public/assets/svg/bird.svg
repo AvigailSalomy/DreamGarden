@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="160" viewBox="0 0 150 160">
+  <defs>
+    <linearGradient id="bb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9fb9d6"/>
+      <stop offset="1" stop-color="#7f9cc0"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="75" cy="150" rx="40" ry="9" fill="#46323c" opacity="0.16"/>
+  <!-- tail -->
+  <path d="M96,110 C 120,104 134,96 140,84 C 128,104 116,120 100,126 Z" fill="#7f9cc0" stroke="#6d89ad" stroke-width="3"/>
+  <!-- body -->
+  <path d="M44,120 C 30,92 36,54 66,42 C 92,32 118,50 120,84 C 121,110 100,128 74,128 C 60,128 50,126 44,120 Z"
+        fill="url(#bb)" stroke="#6d89ad" stroke-width="3"/>
+  <!-- belly -->
+  <path d="M52,116 C 46,96 52,72 74,66 C 92,62 100,80 98,102 C 96,118 78,126 66,124 C 58,122 54,120 52,116 Z"
+        fill="#f4b98c"/>
+  <!-- wing -->
+  <path d="M66,66 C 92,58 112,70 112,92 C 100,80 82,76 66,82 Z" fill="#88a4c7" stroke="#6d89ad" stroke-width="2.5"/>
+  <!-- head -->
+  <circle cx="60" cy="52" r="26" fill="url(#bb)" stroke="#6d89ad" stroke-width="3"/>
+  <path d="M40,52 a20,20 0 0 1 20,-20 a20,20 0 0 1 6,1 C 52,36 44,44 40,52 Z" fill="#f4b98c"/>
+  <!-- beak -->
+  <path d="M36,52 L18,49 L36,45 Z" fill="#e8a45c" stroke="#c9862f" stroke-width="1.5"/>
+  <!-- eye -->
+  <circle cx="52" cy="48" r="5.5" fill="#5b4636"/>
+  <circle cx="50.5" cy="46" r="1.8" fill="#fffdf5"/>
+  <!-- legs -->
+  <path d="M70,126 l-3,14 M84,126 l3,14" stroke="#c9862f" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="63" cy="46" rx="6" ry="4" fill="#f6c7b0" opacity="0.7"/>
+</svg>

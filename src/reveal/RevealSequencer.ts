@@ -36,8 +36,8 @@ export class RevealSequencer {
       // 1. magic gathers at the destination
       const glow = await gatherGlow(scene, dest.x, dest.y - 30, 650);
 
-      // 2. camera eases in to frame the spot
-      await host.camera.focusOn(dest.x, dest.y - 60, 850);
+      // 2. camera eases in to frame the spot (settle to zoom 1 whatever the player left it at)
+      await host.camera.focusOn(dest.x, dest.y - 60, 850, 1);
       await wait(scene, 120);
 
       // 3. the object arrives

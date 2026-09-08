@@ -10,6 +10,23 @@ export interface RegionRect {
 }
 
 /**
+ * A plain grey "still asleep" wash for a region we haven't wired up yet — signals
+ * to the player that the garden extends here and will come alive later. No bloom.
+ */
+export function addDormantVeil(
+  scene: Phaser.Scene,
+  rect: RegionRect,
+): Phaser.GameObjects.Image {
+  return scene.add
+    .image(rect.x, rect.y - 20, "meadow_lush")
+    .setDepth(118)
+    .setTint(0x7c789a)
+    .setAlpha(0.5)
+    .setDisplaySize(rect.w * 1.7, rect.h * 2.0)
+    .setBlendMode(Phaser.BlendModes.MULTIPLY);
+}
+
+/**
  * The "neglect veil" over a garden region: a soft desaturating wash plus a hidden
  * lush-grass patch and dormant flowers that bloom in when the region is restored.
  */
