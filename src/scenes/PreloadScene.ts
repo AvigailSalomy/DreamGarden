@@ -1,10 +1,9 @@
 import Phaser from "phaser";
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from "../game/config";
 import { COLORS, FONT_FAMILY } from "../ui/theme";
 
 const SVG = (name: string) => `assets/svg/${name}.svg`;
 
-/** Cozy themed loader + all texture loading. */
+/** Cozy themed loader + all texture loading. Full-screen. */
 export class PreloadScene extends Phaser.Scene {
   constructor() {
     super("Preload");
@@ -16,12 +15,17 @@ export class PreloadScene extends Phaser.Scene {
     const svg = (key: string, w: number, h: number) =>
       this.load.svg(key, SVG(key), { width: w, height: h });
 
-    svg("sky", 720, 900);
+    // sky / terrain
+    svg("sky", 900, 1100);
     svg("clouds", 1400, 360);
     svg("hills_far", 2400, 560);
     svg("hills_near", 2400, 640);
     svg("grass_tile", 256, 256);
-    svg("path", 600, 1000);
+    svg("path", 700, 1200);
+    svg("meadow_lush", 1000, 640);
+    svg("vignette", 900, 1400);
+
+    // world props
     svg("rock", 220, 170);
     svg("fence", 360, 200);
     svg("weeds", 180, 200);
@@ -29,9 +33,19 @@ export class PreloadScene extends Phaser.Scene {
     svg("stump", 180, 140);
     svg("arch", 460, 560);
     svg("flower", 64, 72);
-    svg("meadow_lush", 1000, 640);
+    svg("planter", 240, 150);
+    svg("sapling", 130, 210);
+    svg("crate", 200, 170);
+    svg("pond_dry", 380, 200);
+    svg("signpost", 150, 190);
+
+    // creatures + puzzle pictures
     svg("rabbit", 220, 250);
     svg("rabbit_portrait", 900, 900);
+    svg("bird", 150, 160);
+    svg("bird_portrait", 900, 900);
+
+    // fx + ui
     svg("spark", 48, 48);
     svg("glow", 256, 256);
     svg("firefly", 24, 24);
@@ -39,32 +53,24 @@ export class PreloadScene extends Phaser.Scene {
     svg("dust", 140, 140);
     svg("coin", 64, 64);
     svg("shadow", 200, 90);
-    svg("vignette", 720, 1280);
   }
 
   create(): void {
-    this.scene.start("Garden");
-    this.scene.launch("UI");
+    this.scene.start("Menu");
   }
 
   private drawLoader(): void {
-    const w = DESIGN_WIDTH;
-    const h = DESIGN_HEIGHT;
+    const w = this.scale.width || window.innerWidth;
+    const h = this.scale.height || window.innerHeight;
 
     const bg = this.add.graphics();
-    bg.fillGradientStyle(
-      COLORS.skyTop,
-      COLORS.skyTop,
-      COLORS.skyLow,
-      COLORS.skyLow,
-      1,
-    );
+    bg.fillGradientStyle(COLORS.skyTop, COLORS.skyTop, COLORS.skyLow, COLORS.skyLow, 1);
     bg.fillRect(0, 0, w, h);
 
     this.add
-      .text(w / 2, h / 2 - 60, "DreamGarden", {
+      .text(w / 2, h / 2 - 54, "DreamGarden", {
         fontFamily: FONT_FAMILY,
-        fontSize: "52px",
+        fontSize: "48px",
         fontStyle: "700",
         color: "#5b4636",
       })
@@ -72,15 +78,15 @@ export class PreloadScene extends Phaser.Scene {
     this.add
       .text(w / 2, h / 2 - 8, "a garden is waking up", {
         fontFamily: FONT_FAMILY,
-        fontSize: "22px",
+        fontSize: "20px",
         fontStyle: "500",
         color: "#7a6350",
       })
       .setOrigin(0.5);
 
-    const barW = 360;
+    const barW = Math.min(360, w - 80);
     const barX = w / 2 - barW / 2;
-    const barY = h / 2 + 50;
+    const barY = h / 2 + 44;
     const track = this.add.graphics();
     track.fillStyle(COLORS.panelEdge, 1);
     track.fillRoundedRect(barX - 4, barY - 4, barW + 8, 24, 12);

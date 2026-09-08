@@ -1,20 +1,20 @@
 import Phaser from "phaser";
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from "../game/config";
 import { COLORS, FONT_FAMILY, bodyStyle, labelStyle, titleStyle } from "../ui/theme";
 import { makePanel, makePill } from "../ui/Panel";
 import { Button } from "../ui/Button";
-import { bus, economy, progression } from "../game/services";
+import { confirmModal, settingsModal } from "../ui/Modal";
+import { safeInsets } from "../util/safeArea";
+import { bus, economy, progression, resetGarden } from "../game/services";
 import { Sfx } from "../fx/Sfx";
 
-const SAFE_TOP = 22;
-const SAFE_SIDE = 24;
-
+/** Screen-fixed HUD. Its camera never pans or zooms, so it stays put over the garden. */
 export class UIScene extends Phaser.Scene {
   private displayedCoins = 0;
   private revealing = false;
 
   private coinText!: Phaser.GameObjects.Text;
   private coinPill!: Phaser.GameObjects.Container;
+  private gear!: Phaser.GameObjects.Text;
 
   private card!: Phaser.GameObjects.Container;
   private cardTitle!: Phaser.GameObjects.Text;
@@ -25,11 +25,9 @@ export class UIScene extends Phaser.Scene {
   private playBtn!: Button;
   private cardHidden = false;
 
-  private readonly cardW = 690;
-  private readonly cardH = 286;
-  private get cardRestY(): number {
-    return DESIGN_HEIGHT - this.cardH / 2 - 16;
-  }
+  private cardW = 690;
+  private readonly cardH = 300;
+  private thumbSize = 96;
 
   private offFns: Array<() => void> = [];
 
@@ -40,7 +38,9 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     this.displayedCoins = economy.coins;
     this.buildCoinPill();
+    this.buildGear();
     this.buildTaskCard();
+    this.layout();
     this.setTaskFromProgression();
     this.publishCoinTarget();
 
@@ -49,9 +49,7 @@ export class UIScene extends Phaser.Scene {
         if (!this.revealing) this.animateCoinsTo(total);
       }),
     );
-    this.offFns.push(
-      bus.on("progress:updated", () => this.drawPips()),
-    );
+    this.offFns.push(bus.on("progress:updated", () => this.drawPips()));
     this.offFns.push(
       bus.on("reveal:done", () => {
         this.revealing = false;
@@ -60,8 +58,49 @@ export class UIScene extends Phaser.Scene {
       }),
     );
 
-    this.scale.on(Phaser.Scale.Events.RESIZE, () => this.publishCoinTarget());
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.offFns.forEach((f) => f()));
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
+      this.offFns.forEach((f) => f());
+      this.offFns = [];
+    });
+
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__dgUI = {
+        play: () => this.onPlay(),
+        task: () => progression.currentTask?.id ?? null,
+        resetNow: () => {
+          resetGarden();
+          this.scene.stop("Garden");
+          this.scene.stop("Puzzle");
+          this.scene.start("Menu");
+        },
+      };
+    }
+  }
+
+  /* ---------------- layout ---------------- */
+
+  private get cardRestY(): number {
+    const inset = safeInsets();
+    return this.scale.height - inset.bottom - this.cardH / 2 - 12;
+  }
+
+  private layout(): void {
+    const W = this.scale.width;
+    const inset = safeInsets();
+
+    const pillW = 158;
+    const pillH = 60;
+    this.coinPill.setPosition(inset.left + 16 + pillW / 2, inset.top + 10 + pillH / 2);
+
+    this.gear.setPosition(W - inset.right - 24, inset.top + 24);
+
+    this.cardW = Math.min(W - 24, 560);
+    this.rebuildCard();
+    this.card.setPosition(W / 2, this.cardHidden ? this.scale.height + 200 : this.cardRestY);
+
+    this.publishCoinTarget();
   }
 
   /* ---------------- coins ---------------- */
@@ -69,15 +108,41 @@ export class UIScene extends Phaser.Scene {
   private buildCoinPill(): void {
     const w = 158;
     const h = 60;
-    const cx = SAFE_SIDE + w / 2;
-    const cy = SAFE_TOP + h / 2;
-    this.coinPill = makePill(this, w, h).setPosition(cx, cy);
-    const coin = this.add.image(-w / 2 + 30, 0, "coin").setDisplaySize(40, 40);
-    this.coinText = this.add
-      .text(6, 0, `${this.displayedCoins}`, labelStyle(26))
-      .setOrigin(0, 0.5);
-    this.coinPill.add([coin, this.coinText]);
-    this.coinPill.setDepth(100);
+    this.coinPill = makePill(this, w, h).setDepth(100);
+    const icon = this.add.image(-w / 2 + 30, 0, "coin").setDisplaySize(40, 40);
+    this.coinText = this.add.text(6, 0, `${this.displayedCoins}`, labelStyle(26)).setOrigin(0, 0.5);
+    this.coinPill.add([icon, this.coinText]);
+  }
+
+  private buildGear(): void {
+    this.gear = this.add
+      .text(0, 0, "⚙", { fontFamily: FONT_FAMILY, fontSize: "32px", color: "#5b4636" })
+      .setOrigin(0.5)
+      .setDepth(100)
+      .setShadow(0, 2, "rgba(255,255,255,0.5)", 2)
+      .setInteractive({ useHandCursor: true });
+    this.gear.on("pointerover", () => this.registry.set("pointerOnUI", true));
+    this.gear.on("pointerout", () => this.registry.set("pointerOnUI", false));
+    this.gear.on("pointerdown", () => {
+      if (this.revealing) return;
+      Sfx.unlock();
+      Sfx.tap();
+      settingsModal(this, { onStartNew: () => this.confirmNewGarden() });
+    });
+  }
+
+  private confirmNewGarden(): void {
+    confirmModal(this, {
+      title: "Start a new garden?",
+      body: "Your current garden progress will be erased for good.",
+      confirmLabel: "Start New Garden",
+      onConfirm: () => {
+        resetGarden();
+        this.scene.stop("Garden");
+        this.scene.stop("Puzzle");
+        this.scene.start("Menu");
+      },
+    });
   }
 
   private publishCoinTarget(): void {
@@ -117,23 +182,18 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
-  /**
-   * Fly coins from a garden world point to the HUD pill, ticking the counter up as
-   * they land. Resolves when the counter has reached the true saved total.
-   */
   playCoinGain(
     cam: Phaser.Cameras.Scene2D.Camera,
     worldX: number,
     worldY: number,
     amount: number,
   ): Promise<void> {
-    const sx = (worldX - cam.scrollX) * cam.zoom;
-    const sy = (worldY - cam.scrollY) * cam.zoom;
+    const sx = (worldX - cam.scrollX) * cam.zoom + cam.x;
+    const sy = (worldY - cam.scrollY) * cam.zoom + cam.y;
     const m = this.coinPill.getWorldTransformMatrix();
     const target = { x: m.tx, y: m.ty };
     const total = economy.coins;
     const startDisplay = this.displayedCoins;
-
     const n = Phaser.Math.Clamp(Math.round(amount / 3), 4, 9);
     Sfx.sparkle();
 
@@ -166,8 +226,7 @@ export class UIScene extends Phaser.Scene {
             landed++;
             Sfx.coin();
             this.bounceCoinPill();
-            const shown =
-              startDisplay + Math.round(((total - startDisplay) * landed) / n);
+            const shown = startDisplay + Math.round(((total - startDisplay) * landed) / n);
             this.displayedCoins = shown;
             this.coinText.setText(`${shown}`);
             if (landed === n) {
@@ -184,50 +243,61 @@ export class UIScene extends Phaser.Scene {
   /* ---------------- task card ---------------- */
 
   private buildTaskCard(): void {
+    this.card = this.add.container(this.scale.width / 2, this.scale.height + 200).setDepth(90);
+    this.rebuildCard();
+  }
+
+  /**
+   * (Re)draw the card at the current width. Thumbnail + text on top, a full-width
+   * Play bar along the bottom — the layout that survives a narrow phone.
+   */
+  private rebuildCard(): void {
+    const prevTitle = this.cardTitle?.text ?? "";
+    const prevStory = this.cardStory?.text ?? "";
+    this.card.removeAll(true);
+
     const w = this.cardW;
     const h = this.cardH;
-    this.card = this.add.container(DESIGN_WIDTH / 2, this.cardRestY).setDepth(90);
+    this.card.add(makePanel(this, w, h));
 
-    const panel = makePanel(this, w, h);
-    this.card.add(panel);
-
-    // thumbnail (left)
-    const thumbR = 68;
-    const thumbX = -w / 2 + 92;
-    const thumbBg = makePanel(this, thumbR * 2, thumbR * 2, { radius: thumbR, highlight: false });
-    thumbBg.setPosition(thumbX, -10);
-    this.cardThumb = this.add.image(thumbX, -4, "rabbit").setOrigin(0.5, 0.5).setScale(0.56);
+    const thumbR = w < 420 ? 52 : 60;
+    this.thumbSize = thumbR * 1.62;
+    const thumbX = -w / 2 + thumbR + 22;
+    const thumbY = -h / 2 + thumbR + 22;
+    this.card.add(
+      makePanel(this, thumbR * 2, thumbR * 2, { radius: thumbR, highlight: false }).setPosition(thumbX, thumbY),
+    );
+    this.cardThumb = this.add
+      .image(thumbX, thumbY + 2, "rabbit")
+      .setOrigin(0.5, 0.5)
+      .setDisplaySize(this.thumbSize, this.thumbSize);
     this.cardThumbQ = this.add
-      .text(thumbX, -10, "?", {
-        fontFamily: FONT_FAMILY,
-        fontStyle: "700",
-        fontSize: "52px",
-        color: "#fef6e8",
-      })
+      .text(thumbX, thumbY, "?", { fontFamily: FONT_FAMILY, fontStyle: "700", fontSize: `${thumbR}px`, color: "#fef6e8" })
       .setOrigin(0.5);
-    this.card.add([thumbBg, this.cardThumb, this.cardThumbQ]);
+    this.card.add([this.cardThumb, this.cardThumbQ]);
 
-    // Play (tall pill, right)
-    const playW = 176;
-    this.playBtn = new Button(this, w / 2 - playW / 2 - 18, -2, {
+    const textX = thumbX + thumbR + 18;
+    const wrap = w / 2 - 20 - textX;
+    this.cardTitle = this.add
+      .text(textX, -h / 2 + 22, prevTitle, { ...titleStyle(w < 420 ? 22 : 25), wordWrap: { width: wrap } })
+      .setOrigin(0, 0);
+    this.cardStory = this.add
+      .text(textX, -h / 2 + 60, prevStory, { ...bodyStyle(w < 420 ? 15 : 16), wordWrap: { width: wrap } })
+      .setOrigin(0, 0);
+
+    this.pips = this.add.graphics();
+
+    const playW = w - 44;
+    this.playBtn = new Button(this, 0, h / 2 - 44, {
       width: playW,
-      height: 172,
+      height: 66,
       label: "Play",
-      fontSize: 34,
+      fontSize: 28,
       onClick: () => this.onPlay(),
     });
-    this.card.add(this.playBtn);
 
-    // text column (between thumb and Play)
-    const textX = thumbX + thumbR + 22;
-    const playLeft = w / 2 - playW - 18;
-    const wrap = playLeft - textX - 16;
-    this.cardTitle = this.add.text(textX, -h / 2 + 24, "", titleStyle(26)).setOrigin(0, 0);
-    this.cardStory = this.add
-      .text(textX, -h / 2 + 64, "", { ...bodyStyle(16), wordWrap: { width: wrap } })
-      .setOrigin(0, 0);
-    this.pips = this.add.graphics();
-    this.card.add([this.cardTitle, this.cardStory, this.pips]);
+    this.card.add([this.cardTitle, this.cardStory, this.pips, this.playBtn]);
+    this.setTaskFromProgression();
   }
 
   private onPlay(): void {
@@ -238,12 +308,13 @@ export class UIScene extends Phaser.Scene {
   }
 
   setTaskFromProgression(): void {
+    if (!this.cardTitle) return;
     const vm = progression.taskVM();
     if (!vm) {
-      this.cardTitle.setText("The garden is waking");
-      this.cardStory.setText("More friends are finding their way here. Come back soon.");
-      this.cardThumb.setTint(0x4a3f5c).setAlpha(0.25);
-      this.cardThumbQ.setAlpha(0.4);
+      this.cardTitle.setText("The garden is whole");
+      this.cardStory.setText("Every friend has come home. Wander and enjoy it a while.");
+      this.cardThumb.setTexture("rabbit").setDisplaySize(this.thumbSize, this.thumbSize).setTint(0x4a3f5c).setAlpha(0.22);
+      this.cardThumbQ.setAlpha(0.35);
       this.playBtn.setEnabled(false).stopPulse();
       this.drawPips(0, 0);
       return;
@@ -251,7 +322,7 @@ export class UIScene extends Phaser.Scene {
     const unlocked = progression.isUnlocked(vm.object.id);
     this.cardTitle.setText(unlocked ? vm.object.name : `Bring back ${shortName(vm.object.name)}`);
     this.cardStory.setText(vm.object.story_text);
-    this.cardThumb.setTexture(vm.object.garden_sprite);
+    this.cardThumb.setTexture(vm.object.garden_sprite).setDisplaySize(this.thumbSize, this.thumbSize);
     if (unlocked) {
       this.cardThumb.clearTint().setAlpha(1);
       this.cardThumbQ.setAlpha(0);
@@ -271,10 +342,11 @@ export class UIScene extends Phaser.Scene {
     const req = required ?? vm?.required ?? 0;
     const g = this.pips;
     g.clear();
-    const x0 = -this.cardW / 2 + 152;
-    const y = this.cardH / 2 - 38;
-    const r = 11;
-    const gap = 34;
+    const thumbR = this.cardW < 420 ? 52 : 60;
+    const x0 = -this.cardW / 2 + thumbR + 22 + thumbR + 18;
+    const y = this.cardH / 2 - 96;
+    const r = 10;
+    const gap = 30;
     for (let i = 0; i < req; i++) {
       const cx = x0 + r + i * gap;
       g.fillStyle(COLORS.shadow, 0.18);
@@ -298,7 +370,7 @@ export class UIScene extends Phaser.Scene {
     this.cardHidden = true;
     this.tweens.add({
       targets: this.card,
-      y: DESIGN_HEIGHT + 160,
+      y: this.scale.height + 220,
       duration: 320,
       ease: "Back.easeIn",
     });
@@ -307,12 +379,7 @@ export class UIScene extends Phaser.Scene {
   showCard(): void {
     if (!this.cardHidden) return;
     this.cardHidden = false;
-    this.tweens.add({
-      targets: this.card,
-      y: this.cardRestY,
-      duration: 380,
-      ease: "Back.easeOut",
-    });
+    this.tweens.add({ targets: this.card, y: this.cardRestY, duration: 380, ease: "Back.easeOut" });
   }
 
   setRevealing(v: boolean): void {
@@ -340,14 +407,14 @@ export class UIScene extends Phaser.Scene {
   /* ---------------- toast ---------------- */
 
   showToast(text: string): void {
-    const t = this.add.container(DESIGN_WIDTH / 2, -60).setDepth(9800);
-    const label = this.add.text(0, 0, text, { ...labelStyle(21), align: "center" }).setOrigin(0.5);
+    const inset = safeInsets();
+    const t = this.add.container(this.scale.width / 2, -60).setDepth(9800);
+    const label = this.add.text(0, 0, text, { ...labelStyle(20), align: "center" }).setOrigin(0.5);
     const pad = 28;
-    const panel = makePanel(this, label.width + pad * 2, 64, { radius: 32 });
-    t.add([panel, label]);
+    t.add([makePanel(this, label.width + pad * 2, 62, { radius: 31 }), label]);
     this.tweens.add({
       targets: t,
-      y: SAFE_TOP + 74,
+      y: inset.top + 60,
       duration: 420,
       ease: "Back.easeOut",
       hold: 1700,

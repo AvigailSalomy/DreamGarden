@@ -20,6 +20,21 @@ export const save = new SaveService();
 export const economy = new EconomyService(save, bus);
 export const progression = new ProgressionService(save, economy, bus, CATALOG);
 
+/** True when the player has anything worth continuing (unlocked objects, coins, or a puzzle in progress). */
+export function hasProgress(): boolean {
+  const s = save.state;
+  return (
+    s.currentTaskIndex > 0 ||
+    s.coins > 0 ||
+    Object.values(s.objects).some((o) => o.puzzles_completed > 0 || o.is_unlocked)
+  );
+}
+
+/** Wipe DreamGarden progress only — never any other localStorage key. */
+export function resetGarden(): void {
+  save.reset();
+}
+
 /** Persist on the way out — presentation may be mid-animation, truth is already safe. */
 if (typeof window !== "undefined") {
   const flush = () => save.saveNow();
