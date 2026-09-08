@@ -10,7 +10,7 @@ export const SAVE_VERSION = 1;
 
 /** Where the camera rests when the garden first opens (top-left scroll, will be clamped).
  *  Kept high enough that sky + hills frame the top of the view. */
-export const START_SCROLL = { x: 150, y: 150 };
+export const START_SCROLL = { x: 150, y: 110 };
 
 export const IS_TOUCH =
   typeof window !== "undefined" &&

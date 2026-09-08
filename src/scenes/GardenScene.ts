@@ -15,7 +15,7 @@ import type { GardenObjectDef } from "../data/types";
 import type { UIScene } from "./UIScene";
 
 const MEADOW: RegionRect = { id: "animalMeadow", x: 505, y: 1010, w: 640, h: 360 };
-const HORIZON = 360;
+const HORIZON = 340;
 
 export class GardenScene extends Phaser.Scene implements RevealHost {
   camera!: CameraController;
@@ -81,10 +81,11 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       .setDepth(-1000);
 
     this.add.image(120, 120, "clouds").setOrigin(0, 0).setScrollFactor(0.12).setDepth(-900).setAlpha(0.9);
-    this.add.image(760, 60, "clouds").setOrigin(0, 0).setScrollFactor(0.18).setDepth(-900).setScale(0.8).setAlpha(0.75);
+    this.add.image(760, 60, "clouds").setOrigin(0, 0).setScrollFactor(0.18).setDepth(-900).setScale(0.8).setAlpha(0.7);
 
-    this.add.image(-80, 250, "hills_far").setOrigin(0, 0).setScrollFactor(0.32).setDepth(-800);
-    this.add.image(-140, 430, "hills_near").setOrigin(0, 0).setScrollFactor(0.52).setDepth(-700);
+    // hills rise from just below the horizon; their feet get covered by the grass
+    this.add.image(-120, HORIZON + 60, "hills_far").setOrigin(0, 1).setScrollFactor(0.35).setDepth(-820);
+    this.add.image(-160, HORIZON + 96, "hills_near").setOrigin(0, 1).setScrollFactor(0.55).setDepth(-780);
   }
 
   private buildGround(): void {
@@ -97,6 +98,20 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       .tileSprite(0, HORIZON, WORLD_WIDTH, WORLD_HEIGHT - HORIZON, "grass_tile")
       .setOrigin(0, 0)
       .setDepth(-190);
+
+    // soft horizon: grass fades up over the hills instead of a hard line
+    const blend = this.add.graphics().setDepth(-185).setScrollFactor(1);
+    blend.fillGradientStyle(
+      COLORS.grassDull,
+      COLORS.grassDull,
+      COLORS.grassDull,
+      COLORS.grassDull,
+      0,
+      0,
+      1,
+      1,
+    );
+    blend.fillRect(0, HORIZON - 96, WORLD_WIDTH, 128);
 
     this.add
       .image(1180, WORLD_HEIGHT + 6, "path")

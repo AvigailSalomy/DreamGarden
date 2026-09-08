@@ -227,6 +227,20 @@ export class PuzzleBoard {
     this.scene.time.delayedCall(950, () => this.o.onSolved());
   }
 
+  /** Dev/demo helper: snap every remaining tile home and trigger the solve. */
+  forceSolve(): void {
+    if (this.done) return;
+    for (const tile of this.tiles) {
+      if (tile.placed) continue;
+      const cell = this.cells.find((c) => c.index === tile.solutionIndex);
+      if (!cell) continue;
+      cell.filled = true;
+      tile.lockInto(cell.x, cell.y);
+      this.placed++;
+    }
+    if (this.placed >= this.cells.length) this.solve();
+  }
+
   destroy(): void {
     this.tiles.forEach((t) => t.destroy());
   }

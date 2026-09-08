@@ -14,7 +14,7 @@ export interface RegionRect {
  * lush-grass patch and dormant flowers that bloom in when the region is restored.
  */
 export class RegionOverlay {
-  private veil: Phaser.GameObjects.Rectangle;
+  private veil: Phaser.GameObjects.Image;
   private lush: Phaser.GameObjects.Image;
   private flowers: Phaser.GameObjects.Image[] = [];
   restored = false;
@@ -30,9 +30,13 @@ export class RegionOverlay {
       .setAlpha(0)
       .setDisplaySize(rect.w * 1.25, rect.h * 1.35);
 
+    // soft-edged neglect veil (reuses the blurred meadow blob, tinted cool grey)
     this.veil = scene.add
-      .rectangle(rect.x, rect.y, rect.w * 1.6, rect.h * 1.8, 0x8b86a6, 0.4)
+      .image(rect.x, rect.y - 20, "meadow_lush")
       .setDepth(120)
+      .setTint(0x74708f)
+      .setAlpha(0.55)
+      .setDisplaySize(rect.w * 1.7, rect.h * 2.0)
       .setBlendMode(Phaser.BlendModes.MULTIPLY);
 
     const rng = new Phaser.Math.RandomDataGenerator([String(seed)]);

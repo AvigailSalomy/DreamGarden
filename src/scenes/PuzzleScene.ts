@@ -111,6 +111,11 @@ export class PuzzleScene extends Phaser.Scene {
     this.root.setAlpha(0);
     this.tweens.add({ targets: this.root, alpha: 1, duration: 220 });
     this.cameras.main.fadeIn(220, 36, 26, 46);
+
+    if (import.meta.env.DEV) {
+      (window as unknown as { __dgSolve?: () => void }).__dgSolve = () =>
+        this.board?.forceSolve();
+    }
   }
 
   private onBack(label: Phaser.GameObjects.Text): void {
