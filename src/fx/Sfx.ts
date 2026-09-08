@@ -87,6 +87,37 @@ class SfxEngine {
   tap(): void {
     this.blip(440, 0.05, { type: "sine", vol: 0.1 });
   }
+
+  /* ---- object-specific puzzle-completion sounds (short, never looped) ---- */
+
+  /** Rabbit: a soft two-note squeak — cute, tiny, not an animal recording. */
+  rabbitChirp(): void {
+    this.blip(560, 0.09, { type: "triangle", vol: 0.14, slideTo: 720, delay: 0.0 });
+    this.blip(700, 0.11, { type: "triangle", vol: 0.13, slideTo: 880, delay: 0.13 });
+  }
+
+  /** Songbird: a clear, pleasant little warble. */
+  birdSong(): void {
+    const notes: Array<[number, number, number]> = [
+      [1046, 0.1, 0.0],
+      [1318, 0.09, 0.11],
+      [1174, 0.09, 0.21],
+      [1568, 0.14, 0.32],
+      [1318, 0.16, 0.46],
+    ];
+    for (const [f, d, t] of notes) {
+      this.blip(f, d, { type: "sine", vol: 0.13, slideTo: f * 1.03, delay: t });
+    }
+    this.blip(2100, 0.06, { type: "sine", vol: 0.05, delay: 0.5 });
+  }
+
+  /** Wildflowers: a soft magical bloom chime (no animal sound). */
+  bloomChime(): void {
+    [880, 1175, 1568, 2093].forEach((f, i) =>
+      this.blip(f, 0.42, { type: "sine", vol: 0.11 - i * 0.015, delay: i * 0.11 }),
+    );
+    this.blip(2637, 0.2, { type: "sine", vol: 0.04, delay: 0.5 });
+  }
 }
 
 export const Sfx = new SfxEngine();

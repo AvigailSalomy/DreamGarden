@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="360" viewBox="0 0 300 360">
+  <defs>
+    <radialGradient id="tc" cx="0.42" cy="0.36" r="0.7">
+      <stop offset="0" stop-color="#a9d68f"/>
+      <stop offset="0.6" stop-color="#8cc178"/>
+      <stop offset="1" stop-color="#6fa863"/>
+    </radialGradient>
+    <linearGradient id="tt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b98f66"/>
+      <stop offset="1" stop-color="#8f6a48"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="150" cy="346" rx="92" ry="14" fill="#46323c" opacity="0.16"/>
+  <path d="M138,344 C 132,300 130,270 138,236 C 142,214 158,214 162,236 C 168,270 168,300 162,344 Z"
+        fill="url(#tt)" stroke="#7d5b3d" stroke-width="4"/>
+  <path d="M150,270 C 138,262 130,250 126,236" stroke="#7d5b3d" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M150,250 C 162,242 172,232 178,220" stroke="#7d5b3d" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <g fill="url(#tc)" stroke="#6fa863" stroke-width="4">
+    <ellipse cx="150" cy="150" rx="118" ry="104"/>
+    <ellipse cx="82" cy="176" rx="62" ry="56"/>
+    <ellipse cx="220" cy="172" rx="66" ry="58"/>
+    <ellipse cx="150" cy="92" rx="70" ry="58"/>
+  </g>
+  <g fill="#bfe1a6" opacity="0.6">
+    <ellipse cx="118" cy="104" rx="34" ry="26"/>
+    <ellipse cx="196" cy="130" rx="26" ry="20"/>
+  </g>
+</svg>

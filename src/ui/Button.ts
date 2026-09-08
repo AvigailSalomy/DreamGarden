@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { COLORS, FONT_FAMILY, RADIUS } from "./theme";
+import { MIN_HIT } from "./hit";
 import { Sfx } from "../fx/Sfx";
 
 export interface ButtonOpts {
@@ -13,8 +14,9 @@ export interface ButtonOpts {
 
 /**
  * A chunky diegetic button (gold gradient by default) with press feedback and an
- * optional idle breathing pulse. Sets the shared `pointerOnUI` registry flag so the
- * garden camera never pans when a press starts on UI.
+ * optional idle breathing pulse. The ENTIRE button — plus a comfortable margin —
+ * is the hit area, never just the text. Sets the shared `pointerOnUI` registry flag
+ * so the garden camera never pans when a press starts on UI.
  */
 export class Button extends Phaser.GameObjects.Container {
   private bg: Phaser.GameObjects.Graphics;
@@ -43,11 +45,7 @@ export class Button extends Phaser.GameObjects.Container {
       .setOrigin(0.5);
 
     this.add([this.bg, this.txt]);
-    this.setSize(this.bw, this.bh);
-    this.setInteractive(
-      new Phaser.Geom.Rectangle(-this.bw / 2, -this.bh / 2, this.bw, this.bh),
-      Phaser.Geom.Rectangle.Contains,
-    );
+    this.applyHitArea();
 
     this.on("pointerover", () => scene.registry.set("pointerOnUI", true));
     this.on("pointerout", () => scene.registry.set("pointerOnUI", false));
@@ -76,6 +74,22 @@ export class Button extends Phaser.GameObjects.Container {
     });
 
     scene.add.existing(this);
+  }
+
+  /** Hit rect = visible button + a comfortable margin, at least MIN_HIT on a side. */
+  private applyHitArea(): void {
+    const pad = 10;
+    const w = Math.max(MIN_HIT, this.bw + pad * 2);
+    const h = Math.max(MIN_HIT, this.bh + pad * 2);
+    // Container.pointWithinHitArea() offsets the local point by displayOrigin
+    // (= size * 0.5), so size the container to the hit rect and anchor the
+    // Rectangle at (0,0) — that lands it centred on the button.
+    this.setSize(w, h);
+    this.setInteractive(
+      new Phaser.Geom.Rectangle(0, 0, w, h),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    if (this.input) this.input.cursor = "pointer";
   }
 
   private draw(gold: boolean): void {
@@ -119,8 +133,8 @@ export class Button extends Phaser.GameObjects.Container {
   setEnabled(v: boolean): this {
     this.enabledState = v;
     this.setAlpha(v ? 1 : 0.5);
-    if (v) this.setInteractive();
-    else this.disableInteractive();
+    // keep the padded hit rect either way; just gate the callbacks via enabledState
+    if (this.input) this.input.enabled = true;
     return this;
   }
 

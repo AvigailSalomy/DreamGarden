@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  OVERVIEW_H,
+  OVERVIEW_W,
   ZOOM_MAX,
   ZOOM_MIN,
   clampScroll,
   clampZoom,
+  computeMinZoom,
   decayVelocity,
   isDragGesture,
   zoomAroundPoint,
@@ -66,15 +69,43 @@ describe("isDragGesture", () => {
 });
 
 describe("clampZoom", () => {
-  it("keeps zoom in the comfortable range", () => {
-    expect(clampZoom(0.2)).toBe(ZOOM_MIN);
+  it("clamps to the given min / max", () => {
+    expect(clampZoom(0.01)).toBe(ZOOM_MIN);
     expect(clampZoom(9)).toBe(ZOOM_MAX);
     expect(clampZoom(1.1)).toBe(1.1);
+    expect(clampZoom(0.5, 0.7, 1.5)).toBe(0.7);
   });
-  it("range is roughly 0.85 .. 1.5", () => {
-    expect(ZOOM_MIN).toBeCloseTo(0.85);
+  it("max stays at ~1.5, absolute floor is low enough for a wide view", () => {
     expect(ZOOM_MAX).toBeGreaterThanOrEqual(1.35);
     expect(ZOOM_MAX).toBeLessThanOrEqual(1.6);
+    expect(ZOOM_MIN).toBeLessThan(0.5);
+  });
+});
+
+describe("computeMinZoom (responsive wide-view minimum)", () => {
+  it("a narrow phone gets a low minimum so much of the garden fits", () => {
+    const z = computeMinZoom(390, 844);
+    expect(z).toBeGreaterThanOrEqual(ZOOM_MIN);
+    expect(z).toBeLessThan(0.6);
+    // shows a good slice of the world width
+    expect(390 / z).toBeGreaterThan(700);
+  });
+
+  it("a wide desktop gets a higher minimum (it already shows a lot)", () => {
+    const phone = computeMinZoom(390, 844);
+    const desktop = computeMinZoom(1366, 768);
+    expect(desktop).toBeGreaterThan(phone);
+    expect(desktop).toBeLessThanOrEqual(0.9);
+  });
+
+  it("never below the absolute floor or above the ceiling", () => {
+    expect(computeMinZoom(100, 100)).toBe(ZOOM_MIN);
+    expect(computeMinZoom(99999, 99999)).toBe(0.9);
+  });
+
+  it("uses the min of the two viewport/overview fits", () => {
+    const z = computeMinZoom(1000, 1000);
+    expect(z).toBeCloseTo(Math.min(1000 / OVERVIEW_W, 1000 / OVERVIEW_H));
   });
 });
 

@@ -15,6 +15,8 @@ export interface RevealHost {
   playCoinGain(worldX: number, worldY: number, amount: number): Promise<void>;
   refreshTaskCard(): void;
   toast(text: string): void;
+  /** Fade the pre-unlock silhouette out under the arriving object (same footprint). */
+  fadeTaskGhost(): void;
 }
 
 export interface EntrancePreset {

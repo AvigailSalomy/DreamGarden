@@ -1,6 +1,7 @@
 import Phaser from "phaser";
-import { FONT_FAMILY, bodyStyle } from "../ui/theme";
+import { bodyStyle } from "../ui/theme";
 import { Button } from "../ui/Button";
+import { makeIconButton } from "../ui/hit";
 import { safeInsets } from "../util/safeArea";
 import { bus, progression, save } from "../game/services";
 import { Sfx } from "../fx/Sfx";
@@ -136,17 +137,11 @@ export class LetterScene extends Phaser.Scene {
     this.envelope.on("pointerdown", () => this.open());
 
     const inset = safeInsets();
-    const skip = this.add
-      .text(W - inset.right - 22, inset.top + 22, "Skip ›", {
-        fontFamily: FONT_FAMILY,
-        fontStyle: "600",
-        fontSize: "19px",
-        color: "#fef6e8",
-      })
-      .setOrigin(1, 0.5)
-      .setDepth(60)
-      .setInteractive({ useHandCursor: true });
-    skip.on("pointerdown", () => this.finish());
+    makeIconButton(this, W - inset.right - 42, inset.top + 26, "Skip ›", 19, () => this.finish(), {
+      color: "#fef6e8",
+      hitW: 108,
+      hitH: 52,
+    }).setDepth(60);
 
     if (import.meta.env.DEV) {
       (window as unknown as Record<string, unknown>).__dgLetter = () => advanceActiveLetter();

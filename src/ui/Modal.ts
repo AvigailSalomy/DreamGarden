@@ -1,7 +1,8 @@
 import Phaser from "phaser";
-import { FONT_FAMILY, bodyStyle, titleStyle } from "./theme";
+import { bodyStyle, titleStyle } from "./theme";
 import { makePanel } from "./Panel";
 import { Button } from "./Button";
+import { makeIconButton } from "./hit";
 import { Sfx } from "../fx/Sfx";
 
 interface ConfirmOpts {
@@ -140,16 +141,7 @@ export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
     }),
   );
 
-  const x = scene.add
-    .text(panelW / 2 - 26, -panelH / 2 + 24, "✕", {
-      fontFamily: FONT_FAMILY,
-      fontStyle: "700",
-      fontSize: "24px",
-      color: "#7a6350",
-    })
-    .setOrigin(0.5)
-    .setInteractive({ useHandCursor: true });
-  x.on("pointerdown", () => {
+  const x = makeIconButton(scene, panelW / 2 - 26, -panelH / 2 + 26, "✕", 22, () => {
     Sfx.tap();
     close();
   });

@@ -20,7 +20,7 @@ export const RABBIT: GardenObjectDef = {
   layer: "actors",
 
   puzzles_required: 1,
-  puzzle: { image: "rabbit_portrait", grids: [{ cols: 2, rows: 2 }], snapRadiusFactor: 0.62 },
+  puzzle: { image: "rabbit_portrait", grids: [{ cols: 2, rows: 2 }], snapRadiusFactor: 0.66 },
 
   reward_coins: 15,
   unlock_order: 0,
@@ -28,6 +28,7 @@ export const RABBIT: GardenObjectDef = {
   reveal_animation: "hop_in",
   idle_behavior: "rabbit_hop",
   movement_bounds: { shape: "rect", x: 900, y: 1500, w: 460, h: 260 },
+  complete_sfx: "rabbitChirp",
 
   letter: {
     body:
@@ -49,20 +50,22 @@ export const WILDFLOWERS: GardenObjectDef = {
   tier: "common",
 
   garden_sprite: "wildflower_bed",
-  garden_position: { x: 340, y: 1648 },
-  garden_scale: 1.05,
+  // sits ON the existing front planter — the flowers grow from its soil
+  garden_position: { x: 470, y: 1652 },
+  garden_scale: 0.98,
   region: "flowerBed",
   layer: "back",
 
   puzzles_required: 1,
   // 2x2 = 4 pieces; the picture reconstructs the restored bloom.
-  puzzle: { image: "wildflowers_portrait", grids: [{ cols: 2, rows: 2 }], snapRadiusFactor: 0.62 },
+  puzzle: { image: "wildflowers_portrait", grids: [{ cols: 2, rows: 2 }], snapRadiusFactor: 0.66 },
 
   reward_coins: 30,
   unlock_order: 1,
 
   reveal_animation: "bloom_wave",
   idle_behavior: "plant_sway",
+  complete_sfx: "bloomChime",
 
   letter: {
     body:
@@ -91,7 +94,7 @@ export const BIRD: GardenObjectDef = {
 
   puzzles_required: 1,
   // 2x3 = 6 pieces (reuses the same drag-and-snap engine, just a bigger grid).
-  puzzle: { image: "bird_portrait", grids: [{ cols: 2, rows: 3 }], snapRadiusFactor: 0.58 },
+  puzzle: { image: "bird_portrait", grids: [{ cols: 2, rows: 3 }], snapRadiusFactor: 0.62 },
 
   reward_coins: 15,
   unlock_order: 2,
@@ -100,6 +103,7 @@ export const BIRD: GardenObjectDef = {
   idle_behavior: "bird_perch",
   // aerial box for the occasional short takeoff-and-return flight
   movement_bounds: { shape: "rect", x: 1750, y: 1110, w: 460, h: 300 },
+  complete_sfx: "birdSong",
 
   letter: {
     body:

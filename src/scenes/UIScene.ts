@@ -260,6 +260,18 @@ export class UIScene extends Phaser.Scene {
     const h = this.cardH;
     this.card.add(makePanel(this, w, h));
 
+    // the WHOLE card is a tap target (thumbnail / text / empty space all start the puzzle)
+    const cardZone = this.add
+      .rectangle(0, -8, w, h - 78, 0xffffff, 0.001)
+      .setInteractive({ useHandCursor: true });
+    cardZone.on("pointerover", () => this.registry.set("pointerOnUI", true));
+    cardZone.on("pointerout", () => this.registry.set("pointerOnUI", false));
+    cardZone.on("pointerup", () => {
+      this.registry.set("pointerOnUI", false);
+      this.onPlay();
+    });
+    this.card.add(cardZone);
+
     const thumbR = w < 420 ? 52 : 60;
     this.thumbSize = thumbR * 1.62;
     const thumbX = -w / 2 + thumbR + 22;

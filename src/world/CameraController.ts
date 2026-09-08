@@ -4,6 +4,7 @@ import {
   ZOOM_MIN,
   clampScroll,
   clampZoom,
+  computeMinZoom,
   decayVelocity,
   isDragGesture,
   zoomAroundPoint,
@@ -12,19 +13,21 @@ import type { WorldSize } from "./cameraMath";
 
 /**
  * Encapsulated garden camera control:
- *  - one finger / mouse drag  -> pan (with inertial glide + world-bounds clamp)
+ *  - one finger / mouse drag  -> pan (gentle inertial glide + world-bounds clamp)
  *  - two fingers              -> pinch zoom toward the gesture midpoint
- *  - mouse wheel / trackpad   -> zoom toward the pointer
+ *  - mouse wheel / trackpad   -> smooth zoom toward the pointer
  *  - tap vs drag disambiguation -> onTap(worldX, worldY)
- *  - focusOn() / disable()      -> reveal sequences borrow the camera, then hand it back
+ *  - focusOn() / frameWide() / disable() -> cinematics borrow the camera, then hand it back
  *
- * The UI lives on its own scene/camera and is never touched by this.
+ * The minimum zoom is computed from the viewport so a player can always pull back
+ * far enough to see most of the garden. The UI lives on its own scene/camera.
  */
 export class CameraController {
   onTap?: (worldX: number, worldY: number) => void;
 
   private cam: Phaser.Cameras.Scene2D.Camera;
   private enabled = false;
+  private minZoom = ZOOM_MIN;
 
   // pan
   private dragging = false;
@@ -48,6 +51,7 @@ export class CameraController {
   ) {
     this.cam = scene.cameras.main;
     this.cam.setBounds(0, 0, world.w, world.h);
+    this.recomputeMinZoom();
     this.targetZoom = this.cam.zoom;
 
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.handleDown, this);
@@ -77,6 +81,22 @@ export class CameraController {
     this.targetZoom = this.cam.zoom;
   }
 
+  get zoom(): number {
+    return this.cam.zoom;
+  }
+
+  get minZoomValue(): number {
+    return this.minZoom;
+  }
+
+  /** Immediately frame the whole garden as wide as this viewport sensibly allows. */
+  frameWide(centreX: number, centreY: number): void {
+    this.cam.setZoom(this.minZoom);
+    this.cam.centerOn(centreX, centreY);
+    this.clamp();
+    this.targetZoom = this.minZoom;
+  }
+
   /** Smoothly centre on a world point, optionally settling to a specific zoom. */
   focusOn(x: number, y: number, duration = 850, zoom?: number): Promise<void> {
     this.vel.x = 0;
@@ -91,18 +111,21 @@ export class CameraController {
       }),
     );
 
-    if (zoom !== undefined && Math.abs(zoom - this.cam.zoom) > 0.001) {
-      tasks.push(
-        new Promise((resolve) => {
-          this.scene.tweens.add({
-            targets: this.cam,
-            zoom,
-            duration,
-            ease: "Sine.easeInOut",
-            onComplete: () => resolve(),
-          });
-        }),
-      );
+    if (zoom !== undefined) {
+      const z = clampZoom(zoom, this.minZoom, ZOOM_MAX);
+      if (Math.abs(z - this.cam.zoom) > 0.001) {
+        tasks.push(
+          new Promise((resolve) => {
+            this.scene.tweens.add({
+              targets: this.cam,
+              zoom: z,
+              duration,
+              ease: "Sine.easeInOut",
+              onComplete: () => resolve(),
+            });
+          }),
+        );
+      }
     }
 
     return Promise.all(tasks).then(() => {
@@ -110,13 +133,20 @@ export class CameraController {
     });
   }
 
-  /** Re-clamp after the viewport size changes. */
+  /** Re-clamp + recompute the responsive min zoom after the viewport size changes. */
   onResize(): void {
+    this.recomputeMinZoom();
+    if (this.cam.zoom < this.minZoom) this.cam.setZoom(this.minZoom);
+    this.targetZoom = clampZoom(this.targetZoom, this.minZoom, ZOOM_MAX);
     this.clamp();
   }
 
-  get zoom(): number {
-    return this.cam.zoom;
+  private recomputeMinZoom(): void {
+    this.minZoom = computeMinZoom(this.cam.width, this.cam.height);
+  }
+
+  private cz(z: number): number {
+    return clampZoom(z, this.minZoom, ZOOM_MAX);
   }
 
   /* ---------------- pointer plumbing ---------------- */
@@ -173,8 +203,9 @@ export class CameraController {
 
     this.cam.scrollX -= dx / this.cam.zoom;
     this.cam.scrollY -= dy / this.cam.zoom;
-    this.vel.x = dx;
-    this.vel.y = dy;
+    // clamp the tracked velocity so a hard flick can't rocket across the world
+    this.vel.x = Phaser.Math.Clamp(dx, -55, 55);
+    this.vel.y = Phaser.Math.Clamp(dy, -55, 55);
     this.clamp();
   }
 
@@ -183,7 +214,7 @@ export class CameraController {
 
     if (this.pinch) {
       if (this.pointers.size >= 2) {
-        this.beginPinch(); // still pinching with a different pair
+        this.beginPinch();
       } else {
         this.endPinch();
       }
@@ -226,13 +257,13 @@ export class CameraController {
     const dist = Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y) || 1;
     const midX = (pair[0].x + pair[1].x) / 2;
     const midY = (pair[0].y + pair[1].y) / 2;
-    const z = clampZoom((this.pinch.startZoom * dist) / this.pinch.startDist);
-    this.applyZoom(z, midX, midY, true);
+    // slight amplification so a small, natural spread does enough
+    const ratio = Math.pow(dist / this.pinch.startDist, 1.15);
+    this.applyZoom(this.cz(this.pinch.startZoom * ratio), midX, midY, true);
   }
 
   private endPinch(): void {
     this.pinch = null;
-    // hand back to one-finger pan without a jump
     const remaining = [...this.pointers.values()][0];
     if (remaining) {
       this.dragging = true;
@@ -260,9 +291,8 @@ export class CameraController {
     dy: number,
   ): void {
     if (!this.enabled || this.uiHasPointer()) return;
-    const factor = Math.exp(-dy * 0.0016);
-    const z = clampZoom(this.targetZoom * factor);
-    this.applyZoom(z, p.x, p.y, false);
+    const factor = Math.exp(-dy * 0.0018);
+    this.applyZoom(this.cz(this.targetZoom * factor), p.x, p.y, false);
   }
 
   /* ---------------- zoom apply + loop ---------------- */
@@ -294,14 +324,14 @@ export class CameraController {
   }
 
   private update = (_time: number, delta: number): void => {
-    // ease wheel zoom toward its target
+    // ease wheel zoom toward its target (responsive but smooth)
     if (this.enabled && Math.abs(this.cam.zoom - this.targetZoom) > 0.0008) {
-      const k = 1 - Math.pow(0.0025, delta / 1000);
-      const z = clampZoom(Phaser.Math.Linear(this.cam.zoom, this.targetZoom, k));
+      const k = 1 - Math.pow(0.0012, delta / 1000);
+      const z = this.cz(Phaser.Math.Linear(this.cam.zoom, this.targetZoom, k));
       this.setZoom(z, this.zoomFocal.x || this.cam.width / 2, this.zoomFocal.y || this.cam.height / 2);
     }
 
-    // inertial pan
+    // gentle inertial pan
     if (this.dragging || this.pinch || (this.vel.x === 0 && this.vel.y === 0)) return;
     this.cam.scrollX -= this.vel.x / this.cam.zoom;
     this.cam.scrollY -= this.vel.y / this.cam.zoom;

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { HORIZON, START_FOCUS, WORLD_HEIGHT, WORLD_WIDTH } from "../game/config";
-import { COLORS, FONT_FAMILY } from "../ui/theme";
+import { COLORS } from "../ui/theme";
+import { makeIconButton } from "../ui/hit";
 import { bus, progression, save } from "../game/services";
 import { CameraController } from "../world/CameraController";
 import { GardenObjectView } from "../world/GardenObjectView";
@@ -28,14 +29,21 @@ const REGIONS: Record<string, RegionRect> = {
 const BLOOMABLE = new Set(["animalMeadow", "cottageYard", "flowerBed"]);
 const WILDFLOWER_TINTS = [0xf3a9cf, 0xf5c24b, 0xb98be0];
 
-/** The one-time opening tour: neglected landmarks, ending at the rabbit meadow. */
-const TOUR: Array<{ x: number; y: number; zoom: number }> = [
-  { x: 1560, y: 940, zoom: 1.05 }, // dormant Garden Heart
-  { x: 2500, y: 1220, zoom: 0.95 }, // dead Great Oak
-  { x: 1540, y: 1950, zoom: 0.95 }, // broken / dry Pond
-  { x: 350, y: 1600, zoom: 1.0 }, // collapsed Wildflowers
-  { x: 1780, y: 1150, zoom: 1.05 }, // empty Songbird perch
-  { x: START_FOCUS.x, y: START_FOCUS.y, zoom: 1.0 }, // Rabbit meadow
+/** Roughly the middle of all the playable garden — the wide opening frames on this. */
+const GARDEN_CENTER = { x: 1500, y: 1520 };
+
+/**
+ * The one-time opening tour: begins on a WIDE view of the whole neglected garden,
+ * then moves between the broken landmarks, and finally settles at the rabbit meadow.
+ */
+const TOUR: Array<{ x: number; y: number; zoom: number | "wide"; hold: number }> = [
+  { x: GARDEN_CENTER.x, y: GARDEN_CENTER.y, zoom: "wide", hold: 1400 }, // whole garden
+  { x: 1560, y: 940, zoom: 0.95, hold: 520 }, // dormant Garden Heart
+  { x: 2500, y: 1240, zoom: 0.9, hold: 520 }, // dead Great Oak
+  { x: 1540, y: 1960, zoom: 0.9, hold: 520 }, // broken / dry Pond
+  { x: 470, y: 1600, zoom: 0.95, hold: 520 }, // collapsed Wildflowers
+  { x: 1760, y: 1150, zoom: 1.0, hold: 520 }, // empty Songbird perch
+  { x: START_FOCUS.x, y: START_FOCUS.y, zoom: 1.0, hold: 300 }, // Rabbit meadow
 ];
 
 const wait = (scene: Phaser.Scene, ms: number) =>
@@ -81,7 +89,13 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.layoutScreen();
 
     this.camera = new CameraController(this, { w: WORLD_WIDTH, h: WORLD_HEIGHT });
-    this.cameras.main.centerOn(START_FOCUS.x, START_FOCUS.y);
+    if (!save.state.openingGardenTourSeen) {
+      // fresh game: first impression is the WHOLE neglected garden
+      this.camera.frameWide(GARDEN_CENTER.x, GARDEN_CENTER.y);
+    } else {
+      this.cameras.main.setZoom(1);
+      this.cameras.main.centerOn(START_FOCUS.x, START_FOCUS.y);
+    }
     this.camera.onTap = (x, y) => this.handleTap(x, y);
 
     this.reveal = new RevealSequencer(this);
@@ -177,11 +191,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private async playTour(): Promise<void> {
     for (const stop of TOUR) {
       if (this.tourSkipped) break;
-      await this.camera.focusOn(stop.x, stop.y, 720, stop.zoom);
-      await wait(this, 460);
+      const z = stop.zoom === "wide" ? this.camera.minZoomValue : stop.zoom;
+      await this.camera.focusOn(stop.x, stop.y, 760, z);
+      await wait(this, stop.hold);
     }
-    // always settle on the meadow
-    await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, this.tourSkipped ? 480 : 760, 1);
+    // always settle on the meadow at a comfortable inspect zoom
+    await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, this.tourSkipped ? 500 : 760, 1);
   }
 
   /** Guide the camera to a restoration's area, present its letter, then hand back control. */
@@ -253,25 +268,20 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   }
 
   private showSkip(onSkip: () => void): void {
-    const inset = { top: 18, right: 16 };
-    const c = this.add.container(this.scale.width - inset.right - 60, inset.top + 20).setScrollFactor(0).setDepth(9000);
-    const t = this.add
-      .text(0, 0, "Skip ›", {
-        fontFamily: FONT_FAMILY,
-        fontStyle: "600",
-        fontSize: "20px",
-        color: "#fef6e8",
-      })
-      .setOrigin(0.5)
-      .setShadow(0, 2, "rgba(70,50,60,0.4)", 3)
-      .setInteractive({ useHandCursor: true });
-    t.on("pointerdown", () => {
-      this.registry.set("pointerOnUI", true);
-      Sfx.tap();
-      onSkip();
-    });
-    c.add(t);
-    this.skipBtn = c;
+    const btn = makeIconButton(
+      this,
+      this.scale.width - 62,
+      44,
+      "Skip ›",
+      20,
+      () => {
+        Sfx.tap();
+        onSkip();
+      },
+      { color: "#fef6e8", hitW: 112, hitH: 54 },
+    );
+    btn.setScrollFactor(0).setDepth(9000);
+    this.skipBtn = btn;
   }
 
   private hideSkip(): void {
@@ -341,7 +351,64 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.prop("signpost", x, y, 0.95, 90);
   }
 
+  private tree(
+    key: string,
+    x: number,
+    y: number,
+    scale: number,
+    o: { depth?: number; tint?: number; alpha?: number; scroll?: number } = {},
+  ): void {
+    const img = this.add.image(x, y, key).setOrigin(0.5, 1).setScale(scale);
+    img.setDepth(o.depth ?? y);
+    if (o.tint !== undefined) img.setTint(o.tint);
+    if (o.alpha !== undefined) img.setAlpha(o.alpha);
+    if (o.scroll !== undefined) img.setScrollFactor(o.scroll);
+  }
+
+  /** A cozy woodland framing the clearing — layered for depth, never over gameplay. */
+  private buildTrees(): void {
+    const kinds = ["tree", "tree_tall", "tree_pine"];
+
+    // 1. hazy far tree line across the back of the whole garden
+    for (let i = 0; i < 10; i++) {
+      const x = 120 + i * 330 + (i % 2) * 60;
+      this.tree(kinds[i % 3], x, 740 + (i % 3) * 24, 0.7 + (i % 2) * 0.12, {
+        depth: -150,
+        tint: 0xb7c6d2,
+        alpha: 0.95,
+        scroll: 0.92,
+      });
+    }
+
+    // 2. mid trees in clusters (normal y-sorted depth, full colour)
+    const mid: Array<[string, number, number, number]> = [
+      // behind the cottage / heart (above the bird perch, clear of the arch)
+      ["tree_tall", 1330, 1070, 0.95],
+      ["tree", 1820, 1050, 0.9],
+      ["tree_pine", 2010, 1120, 0.9],
+      // flower-bed left frame (clear of the wildflower planter at x470)
+      ["tree", 110, 1560, 0.9],
+      ["tree_tall", 40, 1740, 0.95],
+      // tree grove around the dead oak
+      ["tree", 2700, 1540, 1.0],
+      ["tree_pine", 2880, 1440, 0.95],
+      ["tree_tall", 2250, 1360, 0.85],
+      // pondside framing
+      ["tree", 1160, 1900, 0.95],
+      ["tree_tall", 1940, 1880, 0.9],
+      // far side of the meadow
+      ["tree", 560, 1340, 0.85],
+    ];
+    for (const [k, x, y, s] of mid) this.tree(k, x, y, s);
+
+    // 3. dark foreground framing at the world edges (only seen when panned there)
+    this.tree("tree_fg", -70, 1420, 1.35, { depth: 7200, scroll: 1 });
+    this.tree("tree_fg", 3270, 1470, 1.35, { depth: 7200, scroll: 1 });
+  }
+
   private buildProps(): void {
+    this.buildTrees();
+
     // ---- neglected landmark: Garden Heart (future) ----
     this.prop("heart_dormant", 1560, 980, 1.15, 150);
 
@@ -357,11 +424,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.prop("weeds", 1120, 1560, 0.85);
     this.prop("rock", 560, 1620, 1.0, 150);
 
-    // ---- flower bed (Wildflowers — neglected planters already present) ----
-    this.prop("planter", 300, 1560, 1.0, 200);
-    this.prop("planter", 470, 1650, 0.95, 190);
-    this.prop("planter", 200, 1680, 0.85, 170);
-    this.prop("weeds", 380, 1500, 0.8);
+    // ---- flower bed (Wildflowers) ----
+    // The Wildflowers object sprite (wildflower_bed) at (470,1652) IS the planter —
+    // flowers grow from its own soil. No extra planter props here, so the bed never
+    // looks duplicated or like loose flowers sitting outside a pot.
+    this.prop("weeds", 300, 1520, 0.8);
+    this.prop("rock", 690, 1660, 0.8, 120);
     this.sign(120, 1600);
 
     // ---- tree grove (future: the dead Great Oak) ----
@@ -392,9 +460,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     for (const key of Object.keys(REGIONS)) {
       const rect = REGIONS[key];
       if (BLOOMABLE.has(key)) {
+        // the flower bed's bloom lives in its planter sprite, not scattered on the lawn
         const opts =
           key === "flowerBed"
-            ? { flowerCount: 12, flowerTints: WILDFLOWER_TINTS }
+            ? { flowerCount: 0, flowerTints: WILDFLOWER_TINTS }
             : undefined;
         const ov = new RegionOverlay(this, rect, hashRegion(key), opts);
         this.regions.set(key, ov);
@@ -475,20 +544,28 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
 
     const { x, y } = task.garden_position;
 
-    // silhouette: the FINAL sprite, at the FINAL position / scale / origin — no flip,
-    // no free-floating blob. This is exactly what will occupy the spot.
+    // THE silhouette: the exact final sprite — same key, position, scale, origin,
+    // orientation (no flip, no rotation) — rendered as a dark placeholder. When the
+    // real object arrives it lands in precisely this footprint. Only a gentle alpha
+    // breath animates; the transform never moves, so alignment is exact.
+    // same depth rule the revealed GardenObjectView uses (1000 + groundY), so the
+    // silhouette sits on the correct layer — in front of the fence for the perched
+    // bird, etc. — and the real sprite lands in precisely this footprint.
+    const depth = 1000 + y;
     const ghost = this.add
       .image(x, y, task.garden_sprite)
       .setOrigin(0.5, 1)
       .setScale(task.garden_scale)
-      .setDepth(6)
-      .setTint(0x4a3f5c)
-      .setAlpha(0.24);
+      .setFlipX(false)
+      .setAngle(0)
+      .setDepth(depth - 0.5)
+      .setTint(0x3f3550)
+      .setAlpha(0.34);
     this.taskGhost = ghost;
     this.tweens.add({
       targets: ghost,
-      alpha: 0.36,
-      duration: 1600,
+      alpha: 0.46,
+      duration: 1700,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut",
@@ -497,36 +574,33 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     const gw = ghost.displayWidth;
     const gh = ghost.displayHeight;
 
-    // footprint: a soft contour ellipse matching the object's base width
-    const fp = this.add.graphics().setDepth(4);
-    fp.fillStyle(0x3a3350, 0.16);
-    fp.fillEllipse(x, y - 2, gw * 0.82, Math.max(18, gw * 0.22));
-    this.taskFootprint = fp;
+    // SECONDARY ambient feedback only — a soft glow behind the silhouette
+    const glow = this.add
+      .image(x, y - gh * 0.5, "glow")
+      .setDepth(depth - 1)
+      .setScale(Phaser.Math.Clamp(gw / 340, 0.5, 1.4))
+      .setAlpha(0.16)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.taskGlow = glow;
     this.tweens.add({
-      targets: fp,
-      alpha: { from: 0.7, to: 1 },
+      targets: glow,
+      alpha: 0.28,
       duration: 1500,
       yoyo: true,
       repeat: -1,
       ease: "Sine.easeInOut",
     });
+  }
 
-    // glow scaled + centred to the object, not a fixed blob
-    const glow = this.add
-      .image(x, y - gh * 0.5, "glow")
-      .setDepth(5)
-      .setScale(Phaser.Math.Clamp(gw / 300, 0.55, 1.5))
-      .setAlpha(0.3)
-      .setBlendMode(Phaser.BlendModes.ADD);
-    this.taskGlow = glow;
+  /** Fade the silhouette out beneath the arriving object (RevealHost). */
+  fadeTaskGhost(): void {
+    const targets = [this.taskGhost, this.taskGlow, this.taskFootprint].filter(Boolean);
+    if (!targets.length) return;
     this.tweens.add({
-      targets: glow,
-      alpha: 0.5,
-      scale: glow.scale * 1.15,
-      duration: 1400,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
+      targets,
+      alpha: 0,
+      duration: 420,
+      ease: "Sine.easeIn",
     });
   }
 

@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { FONT_FAMILY, bodyStyle } from "../ui/theme";
 import { Button } from "../ui/Button";
 import { confirmModal, settingsModal } from "../ui/Modal";
+import { makeIconButton } from "../ui/hit";
 import { buildCozyBackdrop } from "../world/cozyBackdrop";
 import { safeInsets } from "../util/safeArea";
 import { hasProgress, resetGarden, save } from "../game/services";
@@ -59,20 +60,20 @@ export class MenuScene extends Phaser.Scene {
       });
     }
 
-    // settings gear
-    const gear = this.add
-      .text(W - inset.right - 26, inset.top + 26, "⚙", {
-        fontFamily: FONT_FAMILY,
-        fontSize: "34px",
-        color: "#5b4636",
-      })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    gear.on("pointerdown", () => {
-      Sfx.unlock();
-      Sfx.tap();
-      settingsModal(this, { onStartNew: () => this.confirmNew() });
-    });
+    // settings gear — whole ~52px zone taps, not just the glyph
+    makeIconButton(
+      this,
+      W - inset.right - 30,
+      inset.top + 32,
+      "⚙",
+      34,
+      () => {
+        Sfx.unlock();
+        Sfx.tap();
+        settingsModal(this, { onStartNew: () => this.confirmNew() });
+      },
+      { hitW: 56, hitH: 56 },
+    );
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.relayout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>

@@ -41,12 +41,18 @@ export class PreloadScene extends Phaser.Scene {
     svg("heart_dormant", 220, 240);
     svg("oak_dead", 340, 440);
 
+    // cozy woodland trees (layered background + foreground framing)
+    svg("tree", 300, 360);
+    svg("tree_tall", 260, 440);
+    svg("tree_pine", 240, 420);
+    svg("tree_fg", 360, 520);
+
     // restorations + puzzle pictures
     svg("rabbit", 220, 250);
     svg("rabbit_portrait", 900, 900);
     svg("bird", 150, 160);
     svg("bird_portrait", 900, 900);
-    svg("wildflower_bed", 300, 260);
+    svg("wildflower_bed", 320, 320);
     svg("wildflowers_portrait", 900, 900);
 
     // letter system

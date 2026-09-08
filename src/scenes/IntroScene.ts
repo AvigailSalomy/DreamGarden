@@ -1,7 +1,8 @@
 import Phaser from "phaser";
-import { FONT_FAMILY, bodyStyle, titleStyle } from "../ui/theme";
+import { bodyStyle, titleStyle } from "../ui/theme";
 import { makePanel } from "../ui/Panel";
 import { Button } from "../ui/Button";
+import { makeIconButton } from "../ui/hit";
 import { buildCozyBackdrop } from "../world/cozyBackdrop";
 import { safeInsets } from "../util/safeArea";
 import { save } from "../game/services";
@@ -15,8 +16,31 @@ const LINES = [
 
 /** Short magical-letter intro. Only shown for a fresh garden; always skippable. */
 export class IntroScene extends Phaser.Scene {
+  private lineObjs: Phaser.GameObjects.Text[] = [];
+  private lineTweens: Phaser.Tweens.Tween[] = [];
+  private enterBtn!: Button;
+  private enterTween?: Phaser.Tweens.Tween;
+
   constructor() {
     super("Intro");
+  }
+
+  /** Tap-anywhere: jump the line reveal straight to "ready to enter". */
+  private reveal(): void {
+    let changed = false;
+    this.lineTweens.forEach((tw, i) => {
+      if (tw.isPlaying() || tw.paused || (this.lineObjs[i] && this.lineObjs[i].alpha < 1)) {
+        tw.stop();
+        this.lineObjs[i].setAlpha(1);
+        changed = true;
+      }
+    });
+    if (this.enterBtn && this.enterBtn.alpha < 1) {
+      this.enterTween?.stop();
+      this.enterBtn.setAlpha(1);
+      changed = true;
+    }
+    if (changed) Sfx.tap();
   }
 
   create(): void {
@@ -25,7 +49,13 @@ export class IntroScene extends Phaser.Scene {
     const H = this.scale.height;
     const inset = safeInsets();
 
-    this.add.rectangle(0, 0, W, H, 0x241a2e, 0.32).setOrigin(0, 0).setDepth(0);
+    // dim + a full-screen tap zone that fast-forwards the line reveal
+    const scrim = this.add
+      .rectangle(0, 0, W, H, 0x241a2e, 0.32)
+      .setOrigin(0, 0)
+      .setDepth(0)
+      .setInteractive();
+    scrim.on("pointerdown", () => this.reveal());
 
     const panelW = Math.min(W - 44, 540);
     const panelH = Math.min(H - 220, 470);
@@ -41,7 +71,7 @@ export class IntroScene extends Phaser.Scene {
         .setOrigin(0.5),
     );
 
-    const lineObjs = LINES.map((text, i) => {
+    this.lineObjs = LINES.map((text, i) => {
       const t = this.add
         .text(0, -panelH / 2 + 120 + i * 78, text, {
           ...bodyStyle(Math.min(20, W * 0.042)),
@@ -53,35 +83,38 @@ export class IntroScene extends Phaser.Scene {
       card.add(t);
       return t;
     });
-    lineObjs.forEach((t, i) =>
+    this.lineTweens = this.lineObjs.map((t, i) =>
       this.tweens.add({ targets: t, alpha: 1, y: t.y - 6, delay: 250 + i * 550, duration: 420 }),
     );
 
-    const enter = new Button(this, 0, panelH / 2 - 62, {
+    this.enterBtn = new Button(this, 0, panelH / 2 - 62, {
       width: Math.min(320, panelW - 60),
       height: 88,
       label: "Enter the Garden",
       fontSize: 26,
       onClick: () => this.finish(),
     });
-    enter.setAlpha(0);
-    this.tweens.add({ targets: enter, alpha: 1, delay: 250 + LINES.length * 550, duration: 300 });
-    card.add(enter);
+    this.enterBtn.setAlpha(0);
+    this.enterTween = this.tweens.add({
+      targets: this.enterBtn,
+      alpha: 1,
+      delay: 250 + LINES.length * 550,
+      duration: 300,
+    });
+    card.add(this.enterBtn);
 
     card.setScale(0.94).setAlpha(0);
     this.tweens.add({ targets: card, scale: 1, alpha: 1, duration: 300, ease: "Back.easeOut" });
 
-    const skip = this.add
-      .text(W - inset.right - 24, inset.top + 24, "Skip ›", {
-        fontFamily: FONT_FAMILY,
-        fontStyle: "600",
-        fontSize: "20px",
-        color: "#fef6e8",
-      })
-      .setOrigin(1, 0.5)
-      .setDepth(2)
-      .setInteractive({ useHandCursor: true });
-    skip.on("pointerdown", () => this.finish());
+    makeIconButton(
+      this,
+      W - inset.right - 44,
+      inset.top + 28,
+      "Skip ›",
+      20,
+      () => this.finish(),
+      { color: "#fef6e8", hitW: 110, hitH: 52 },
+    ).setDepth(2);
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.relayout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>

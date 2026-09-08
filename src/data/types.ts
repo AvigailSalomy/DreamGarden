@@ -74,6 +74,9 @@ export interface GardenObjectDef {
   idle_behavior: IdleBehaviorId;
   movement_bounds?: MovementBounds;
 
+  /** Sfx method to play during the finished-picture hold, e.g. "rabbitChirp". */
+  complete_sfx?: string;
+
   /** Envelope text shown when this restoration becomes the active task. */
   letter: LetterConfig;
   /** One short line shown right after the reveal, before the camera guides onward. */

@@ -1,8 +1,28 @@
 import Phaser from "phaser";
-import { COLORS, RADIUS } from "../ui/theme";
+import { COLORS } from "../ui/theme";
+import { MIN_HIT } from "../ui/hit";
 import { Sfx } from "../fx/Sfx";
 
-/** One draggable picture tile. Rectangular underneath, dressed to read as a real piece. */
+export interface PuzzleTileOpts {
+  /** Baked canvas texture of this jigsaw piece (already clipped to its cut shape). */
+  pieceKey: string;
+  solutionIndex: number;
+  /** Display size of the baked frame at board scale. */
+  frameW: number;
+  frameH: number;
+  /** Base-cell size at board scale (for squash reference). */
+  cellW: number;
+  cellH: number;
+  /** Board-scale path for the outline stroke, centred on (0,0). Empty = rounded rect. */
+  pathStr: string;
+  trayScale: number;
+}
+
+/**
+ * One draggable jigsaw piece. The visible art is an irregular cut, but the HIT
+ * AREA is a generous rectangle around the whole frame (+ margin), so it is easy
+ * to grab anywhere over the piece and a little outside it too.
+ */
 export class PuzzleTile extends Phaser.GameObjects.Container {
   readonly solutionIndex: number;
   homeX = 0;
@@ -13,45 +33,50 @@ export class PuzzleTile extends Phaser.GameObjects.Container {
   private border: Phaser.GameObjects.Graphics;
   private shadow: Phaser.GameObjects.Image;
   private trayScale: number;
-  private boardScale: number;
+  private boardScale = 1;
 
-  constructor(
-    scene: Phaser.Scene,
-    texKey: string,
-    frame: string,
-    solutionIndex: number,
-    cellW: number,
-    cellH: number,
-    trayScale: number,
-  ) {
+  constructor(scene: Phaser.Scene, o: PuzzleTileOpts) {
     super(scene, 0, 0);
-    this.solutionIndex = solutionIndex;
-    this.trayScale = trayScale;
-    this.boardScale = 1;
+    this.solutionIndex = o.solutionIndex;
+    this.trayScale = o.trayScale;
 
     this.shadow = scene.add
-      .image(0, 10, "shadow")
-      .setDisplaySize(cellW * 1.05, cellW * 0.4)
+      .image(0, 12, "shadow")
+      .setDisplaySize(o.frameW * 0.92, o.frameW * 0.34)
       .setAlpha(0);
-    this.pic = scene.add.image(0, 0, texKey, frame).setDisplaySize(cellW, cellH);
+
+    this.pic = scene.add.image(0, 0, o.pieceKey).setDisplaySize(o.frameW, o.frameH);
+
     this.border = scene.add.graphics();
-    this.border.lineStyle(4, COLORS.panel, 0.95);
-    this.border.strokeRoundedRect(-cellW / 2, -cellH / 2, cellW, cellH, RADIUS.tile);
-    this.border.lineStyle(2, COLORS.goldLight, 0.5);
-    this.border.strokeRoundedRect(-cellW / 2 + 4, -cellH / 2 + 4, cellW - 8, cellH - 8, RADIUS.tile - 3);
+    if (o.pathStr) {
+      this.border.lineStyle(4, COLORS.panel, 0.9);
+      this.border.strokePoints(pathToPoints(o.pathStr), true);
+      this.border.lineStyle(2, COLORS.goldLight, 0.4);
+      this.border.strokePoints(pathToPoints(o.pathStr), true);
+    }
 
     this.add([this.shadow, this.pic, this.border]);
-    this.setSize(cellW, cellH);
-    this.setScale(trayScale);
+
+    // generous rectangular hit area around the whole frame + a tolerance margin.
+    // NOTE: on a Container, pointWithinHitArea() offsets the local point by
+    // displayOrigin (= size * 0.5), so the hit Rectangle must start at (0,0) — not
+    // (-w/2,-h/2) — for it to sit centred on the piece.
+    const pad = 14;
+    const hw = Math.max(MIN_HIT, o.frameW + pad * 2);
+    const hh = Math.max(MIN_HIT, o.frameH + pad * 2);
+    this.setSize(hw, hh);
     this.setInteractive(
-      new Phaser.Geom.Rectangle(-cellW / 2, -cellH / 2, cellW, cellH),
+      new Phaser.Geom.Rectangle(0, 0, hw, hh),
       Phaser.Geom.Rectangle.Contains,
     );
+    if (this.input) this.input.cursor = "grab";
     scene.input.setDraggable(this);
     scene.add.existing(this);
+    this.setScale(o.trayScale);
 
     this.on("dragstart", this.onDragStart, this);
     this.on("drag", this.onDrag, this);
+    this.on("dragend", this.onDragEnd, this);
   }
 
   setHome(x: number, y: number): void {
@@ -62,26 +87,31 @@ export class PuzzleTile extends Phaser.GameObjects.Container {
 
   private onDragStart(): void {
     if (this.placed) return;
+    this.scene.registry.set("pointerOnUI", true);
     Sfx.unlock();
     Sfx.pickup();
     this.scene.children.bringToTop(this);
     this.setDepth(500);
     this.scene.tweens.add({
       targets: this,
-      scaleX: this.boardScale * 1.06,
-      scaleY: this.boardScale * 1.06,
+      scaleX: this.boardScale * 1.08,
+      scaleY: this.boardScale * 1.08,
       duration: 130,
       ease: "Back.easeOut",
     });
-    this.scene.tweens.add({ targets: this.shadow, alpha: 0.35, duration: 130 });
+    this.scene.tweens.add({ targets: this.shadow, alpha: 0.34, duration: 130 });
   }
 
   private onDrag(_p: Phaser.Input.Pointer, dragX: number, dragY: number): void {
     if (this.placed) return;
-    this.setPosition(dragX, dragY);
+    this.setPosition(dragX, dragY); // stays attached even if the pointer leaves the sprite
   }
 
-  /** Called by the board on a wrong / short drop. */
+  private onDragEnd(): void {
+    this.scene.registry.set("pointerOnUI", false);
+  }
+
+  /** Wrong / short drop — glide home. */
   returnHome(): void {
     Sfx.returnTile();
     this.scene.tweens.add({ targets: this.shadow, alpha: 0, duration: 150 });
@@ -97,7 +127,7 @@ export class PuzzleTile extends Phaser.GameObjects.Container {
     });
   }
 
-  /** Called by the board on a correct drop. */
+  /** Correct drop — settle into the cell and lock. */
   lockInto(cx: number, cy: number): void {
     this.placed = true;
     this.disableInteractive();
@@ -129,4 +159,38 @@ export class PuzzleTile extends Phaser.GameObjects.Container {
   fadeBorder(): void {
     this.scene.tweens.add({ targets: this.border, alpha: 0, duration: 260 });
   }
+}
+
+/** Rough polyline from an SVG path string (M/L/Q/Z) for a stroke outline. */
+function pathToPoints(path: string): Phaser.Math.Vector2[] {
+  const pts: Phaser.Math.Vector2[] = [];
+  const tokens = path.trim().split(/\s+/);
+  let i = 0;
+  let cur = new Phaser.Math.Vector2(0, 0);
+  const num = () => parseFloat(tokens[i++]);
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (cmd === "M" || cmd === "L") {
+      cur = new Phaser.Math.Vector2(num(), num());
+      pts.push(cur.clone());
+    } else if (cmd === "Q") {
+      const cxp = num();
+      const cyp = num();
+      const ex = num();
+      const ey = num();
+      for (let t = 0.25; t <= 1.0001; t += 0.25) {
+        const mt = 1 - t;
+        pts.push(
+          new Phaser.Math.Vector2(
+            mt * mt * cur.x + 2 * mt * t * cxp + t * t * ex,
+            mt * mt * cur.y + 2 * mt * t * cyp + t * t * ey,
+          ),
+        );
+      }
+      cur = new Phaser.Math.Vector2(ex, ey);
+    } else if (cmd === "Z") {
+      break;
+    }
+  }
+  return pts;
 }

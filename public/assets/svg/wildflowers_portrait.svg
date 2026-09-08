@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640">
   <defs>
-    <radialGradient id="wpbg" cx="0.5" cy="0.44" r="0.75">
+    <radialGradient id="wpbg" cx="0.5" cy="0.42" r="0.78">
       <stop offset="0" stop-color="#f7eefb"/>
       <stop offset="0.55" stop-color="#efe0ef"/>
       <stop offset="1" stop-color="#e7d0dc"/>
@@ -10,8 +10,11 @@
       <stop offset="0.75" stop-color="#000" stop-opacity="0"/>
       <stop offset="1" stop-color="#5b4636" stop-opacity="0.22"/>
     </radialGradient>
+    <linearGradient id="wpwood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dcb589"/><stop offset="1" stop-color="#a97d53"/>
+    </linearGradient>
     <linearGradient id="wpsoil" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#7a6249"/><stop offset="1" stop-color="#5f4a37"/>
+      <stop offset="0" stop-color="#7a5d40"/><stop offset="1" stop-color="#584330"/>
     </linearGradient>
   </defs>
 
@@ -21,63 +24,77 @@
     <circle cx="44" cy="430" r="58"/><circle cx="150" cy="600" r="50"/><circle cx="520" cy="590" r="56"/>
   </g>
   <g opacity="0.16">
-    <circle cx="120" cy="220" r="26" fill="#b98be0"/><circle cx="500" cy="230" r="22" fill="#f3a9cf"/>
-    <circle cx="470" cy="440" r="30" fill="#f5c24b"/><circle cx="170" cy="470" r="20" fill="#b98be0"/>
+    <circle cx="120" cy="180" r="26" fill="#b98be0"/><circle cx="500" cy="190" r="22" fill="#f3a9cf"/>
+    <circle cx="470" cy="410" r="30" fill="#f5c24b"/><circle cx="170" cy="430" r="20" fill="#b98be0"/>
   </g>
 
-  <!-- soil mound -->
-  <path d="M40,470 C 90,410 260,388 320,388 C 380,388 550,408 600,470 C 560,516 460,538 320,538 C 180,538 80,516 40,470 Z"
-        fill="url(#wpsoil)" stroke="#4c3a2b" stroke-width="5"/>
-  <g fill="#8fc77a" stroke="#7bb268" stroke-width="4">
-    <ellipse cx="150" cy="452" rx="42" ry="18" transform="rotate(-14 150 452)"/>
-    <ellipse cx="490" cy="452" rx="42" ry="18" transform="rotate(12 490 452)"/>
-    <ellipse cx="320" cy="470" rx="52" ry="22"/>
+  <ellipse cx="320" cy="622" rx="250" ry="20" fill="#5b4636" opacity="0.14"/>
+
+  <!-- REAR blooms: short stems rooted in the soil, heads just above the rim -->
+  <g stroke="#7fae7c" stroke-width="15" stroke-linecap="round" fill="none">
+    <path d="M196,320 C 184,250 176,196 190,140"/>
+    <path d="M320,326 C 316,244 316,182 320,120"/>
+    <path d="M446,320 C 460,250 466,204 448,150"/>
+    <path d="M258,322 C 250,272 250,236 258,200"/>
+    <path d="M384,322 C 392,272 392,236 384,200"/>
+  </g>
+  <g stroke-width="4">
+    <g transform="translate(190,124)" fill="#b98be0" stroke="#a06fd0">
+      <ellipse cx="0" cy="-24" rx="17" ry="26"/><ellipse cx="24" cy="0" rx="17" ry="26" transform="rotate(72 24 0)"/>
+      <ellipse cx="15" cy="24" rx="17" ry="26" transform="rotate(144 15 24)"/><ellipse cx="-15" cy="24" rx="17" ry="26" transform="rotate(216 -15 24)"/>
+      <ellipse cx="-24" cy="0" rx="17" ry="26" transform="rotate(288 -24 0)"/>
+      <circle cx="0" cy="0" r="12" fill="#ffe6a3" stroke="none"/></g>
+    <g transform="translate(320,110)" fill="#f3a9cf" stroke="#e58bb9">
+      <ellipse cx="0" cy="-28" rx="19" ry="30"/><ellipse cx="28" cy="0" rx="19" ry="30" transform="rotate(72 28 0)"/>
+      <ellipse cx="17" cy="28" rx="19" ry="30" transform="rotate(144 17 28)"/><ellipse cx="-17" cy="28" rx="19" ry="30" transform="rotate(216 -17 28)"/>
+      <ellipse cx="-28" cy="0" rx="19" ry="30" transform="rotate(288 -28 0)"/>
+      <circle cx="0" cy="0" r="14" fill="#f5c24b" stroke="none"/></g>
+    <g transform="translate(448,148)" fill="#f5c24b" stroke="#e0a832">
+      <ellipse cx="0" cy="-22" rx="15" ry="24"/><ellipse cx="22" cy="0" rx="15" ry="24" transform="rotate(72 22 0)"/>
+      <ellipse cx="14" cy="22" rx="15" ry="24" transform="rotate(144 14 22)"/><ellipse cx="-14" cy="22" rx="15" ry="24" transform="rotate(216 -14 22)"/>
+      <ellipse cx="-22" cy="0" rx="15" ry="24" transform="rotate(288 -22 0)"/>
+      <circle cx="0" cy="0" r="11" fill="#8f6444" stroke="none"/></g>
+    <circle cx="258" cy="196" r="14" fill="#f3a9cf" stroke="#e58bb9"/>
+    <circle cx="384" cy="196" r="14" fill="#b98be0" stroke="#a06fd0"/>
   </g>
 
-  <!-- tall stems + blooms, spread across the frame -->
-  <g stroke="#7fae7c" stroke-width="10" stroke-linecap="round" fill="none">
-    <path d="M120,452 C 110,340 106,250 116,150"/>
-    <path d="M220,462 C 210,340 210,240 224,140"/>
-    <path d="M320,470 C 316,330 316,220 322,110"/>
-    <path d="M420,462 C 430,340 434,240 420,150"/>
-    <path d="M520,452 C 534,340 540,270 520,170"/>
+  <!-- the planter: wide wooden trough, the picture's visual anchor -->
+  <path d="M56,286 L584,286 L528,606 C 528,618 462,624 320,624 C 178,624 112,618 112,606 Z"
+        fill="url(#wpwood)" stroke="#8f6444" stroke-width="8"/>
+  <rect x="36" y="240" width="568" height="54" rx="22" fill="#e7c39a" stroke="#8f6444" stroke-width="8"/>
+  <path d="M72,300 C 192,282 448,282 568,300 C 540,338 448,348 320,348 C 192,348 100,338 72,300 Z" fill="url(#wpsoil)"/>
+  <path d="M120,296 q100,-16 200,0" stroke="#8f6a48" stroke-width="6" fill="none" opacity="0.5"/>
+
+  <!-- FRONT blooms: rooted in the soil, standing just in front of the rim -->
+  <g stroke="#7bb268" stroke-width="15" stroke-linecap="round" fill="none">
+    <path d="M232,322 C 224,262 224,238 232,196"/>
+    <path d="M320,326 C 320,266 320,240 322,198"/>
+    <path d="M410,322 C 418,262 418,238 410,200"/>
   </g>
-
-  <g stroke-width="3">
-    <g transform="translate(116,140)" fill="#f3a9cf" stroke="#e58bb9">
-      <ellipse cx="0" cy="-26" rx="18" ry="27"/><ellipse cx="26" cy="0" rx="18" ry="27" transform="rotate(72 26 0)"/>
-      <ellipse cx="16" cy="26" rx="18" ry="27" transform="rotate(144 16 26)"/><ellipse cx="-16" cy="26" rx="18" ry="27" transform="rotate(216 -16 26)"/>
-      <ellipse cx="-26" cy="0" rx="18" ry="27" transform="rotate(288 -26 0)"/>
-      <circle cx="0" cy="0" r="13" fill="#f5c24b" stroke="none"/></g>
-
-    <g transform="translate(224,132)" fill="#f5c24b" stroke="#e0a832">
-      <ellipse cx="0" cy="-24" rx="16" ry="24"/><ellipse cx="24" cy="0" rx="16" ry="24" transform="rotate(72 24 0)"/>
-      <ellipse cx="15" cy="24" rx="16" ry="24" transform="rotate(144 15 24)"/><ellipse cx="-15" cy="24" rx="16" ry="24" transform="rotate(216 -15 24)"/>
-      <ellipse cx="-24" cy="0" rx="16" ry="24" transform="rotate(288 -24 0)"/>
-      <circle cx="0" cy="0" r="12" fill="#8f6444" stroke="none"/></g>
-
-    <g transform="translate(322,102)" fill="#b98be0" stroke="#a06fd0">
-      <ellipse cx="0" cy="-28" rx="19" ry="29"/><ellipse cx="28" cy="0" rx="19" ry="29" transform="rotate(72 28 0)"/>
-      <ellipse cx="17" cy="28" rx="19" ry="29" transform="rotate(144 17 28)"/><ellipse cx="-17" cy="28" rx="19" ry="29" transform="rotate(216 -17 28)"/>
-      <ellipse cx="-28" cy="0" rx="19" ry="29" transform="rotate(288 -28 0)"/>
-      <circle cx="0" cy="0" r="14" fill="#ffe6a3" stroke="none"/></g>
-
-    <g transform="translate(420,142)" fill="#f3a9cf" stroke="#e58bb9">
-      <ellipse cx="0" cy="-24" rx="16" ry="24"/><ellipse cx="24" cy="0" rx="16" ry="24" transform="rotate(72 24 0)"/>
-      <ellipse cx="15" cy="24" rx="16" ry="24" transform="rotate(144 15 24)"/><ellipse cx="-15" cy="24" rx="16" ry="24" transform="rotate(216 -15 24)"/>
-      <ellipse cx="-24" cy="0" rx="16" ry="24" transform="rotate(288 -24 0)"/>
-      <circle cx="0" cy="0" r="12" fill="#f5c24b" stroke="none"/></g>
-
-    <g transform="translate(520,162)" fill="#b98be0" stroke="#a06fd0">
-      <ellipse cx="0" cy="-22" rx="15" ry="22"/><ellipse cx="22" cy="0" rx="15" ry="22" transform="rotate(72 22 0)"/>
-      <ellipse cx="14" cy="22" rx="15" ry="22" transform="rotate(144 14 22)"/><ellipse cx="-14" cy="22" rx="15" ry="22" transform="rotate(216 -14 22)"/>
-      <ellipse cx="-22" cy="0" rx="15" ry="22" transform="rotate(288 -22 0)"/>
+  <g stroke-width="4">
+    <g transform="translate(232,190)" fill="#f3a9cf" stroke="#e58bb9">
+      <ellipse cx="0" cy="-22" rx="16" ry="25"/><ellipse cx="22" cy="0" rx="16" ry="25" transform="rotate(72 22 0)"/>
+      <ellipse cx="14" cy="22" rx="16" ry="25" transform="rotate(144 14 22)"/><ellipse cx="-14" cy="22" rx="16" ry="25" transform="rotate(216 -14 22)"/>
+      <ellipse cx="-22" cy="0" rx="16" ry="25" transform="rotate(288 -22 0)"/>
+      <circle cx="0" cy="0" r="11" fill="#f5c24b" stroke="none"/></g>
+    <g transform="translate(320,182)" fill="#f5c24b" stroke="#e0a832">
+      <ellipse cx="0" cy="-24" rx="17" ry="27"/><ellipse cx="24" cy="0" rx="17" ry="27" transform="rotate(72 24 0)"/>
+      <ellipse cx="15" cy="24" rx="17" ry="27" transform="rotate(144 15 24)"/><ellipse cx="-15" cy="24" rx="17" ry="27" transform="rotate(216 -15 24)"/>
+      <ellipse cx="-24" cy="0" rx="17" ry="27" transform="rotate(288 -24 0)"/>
+      <circle cx="0" cy="0" r="12" fill="#c9902f" stroke="none"/></g>
+    <g transform="translate(410,192)" fill="#b98be0" stroke="#a06fd0">
+      <ellipse cx="0" cy="-22" rx="16" ry="25"/><ellipse cx="22" cy="0" rx="16" ry="25" transform="rotate(72 22 0)"/>
+      <ellipse cx="14" cy="22" rx="16" ry="25" transform="rotate(144 14 22)"/><ellipse cx="-14" cy="22" rx="16" ry="25" transform="rotate(216 -14 22)"/>
+      <ellipse cx="-22" cy="0" rx="16" ry="25" transform="rotate(288 -22 0)"/>
       <circle cx="0" cy="0" r="11" fill="#ffe6a3" stroke="none"/></g>
   </g>
 
+  <!-- soil sprigs + sparkles -->
+  <path d="M150,320 q-12,-28 4,-46 q16,18 8,46z" fill="#8fc77a"/>
+  <path d="M490,320 q12,-28 -4,-46 q-16,18 -8,46z" fill="#8fc77a"/>
   <g fill="#fffdf5">
-    <path d="M470,120 l8,18 18,8 -18,8 -8,18 -8,-18 -18,-8 18,-8 z"/>
-    <path d="M120,300 l6,14 14,6 -14,6 -6,14 -6,-14 -14,-6 14,-6 z" opacity="0.8"/>
+    <path d="M300,244 l8,18 18,8 -18,8 -8,18 -8,-18 -18,-8 18,-8 z"/>
+    <path d="M470,180 l6,14 14,6 -14,6 -6,14 -6,-14 -14,-6 14,-6 z" opacity="0.8"/>
   </g>
   <rect width="640" height="640" fill="url(#wpv)"/>
 </svg>

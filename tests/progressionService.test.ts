@@ -112,4 +112,20 @@ describe("ProgressionService — Milestone 3 order: Rabbit → Wildflowers → S
     expect(bird.puzzle.grids[0]).toEqual({ cols: 2, rows: 3 });
     expect(bird.puzzle.image).toBe("bird_portrait");
   });
+
+  it("piece counts are unchanged: 4 / 4 / 6", () => {
+    const count = (id: string) => {
+      const g = CATALOG.find((o) => o.id === id)!.puzzle.grids[0];
+      return g.cols * g.rows;
+    };
+    expect(count("rabbit")).toBe(4);
+    expect(count("wildflowers")).toBe(4);
+    expect(count("bird")).toBe(6);
+  });
+
+  it("each restoration names an object-specific completion sound", () => {
+    expect(CATALOG.find((o) => o.id === "rabbit")!.complete_sfx).toBe("rabbitChirp");
+    expect(CATALOG.find((o) => o.id === "wildflowers")!.complete_sfx).toBe("bloomChime");
+    expect(CATALOG.find((o) => o.id === "bird")!.complete_sfx).toBe("birdSong");
+  });
 });

@@ -40,11 +40,12 @@ export class RevealSequencer {
       await host.camera.focusOn(dest.x, dest.y - 60, 850, 1);
       await wait(scene, 120);
 
-      // 3. the object arrives
+      // 3. the object arrives — into exactly the silhouette's footprint
       Sfx.fanfare();
       view = host.spawnObjectView(def, true);
       const preset = ENTRANCE_PRESETS[def.reveal_animation] ?? ENTRANCE_PRESETS.hop_in;
       await preset.run(host, view, dest);
+      host.fadeTaskGhost(); // shadow -> exact object, same spot
       scene.tweens.add({ targets: glow, alpha: 0, scale: 0.4, duration: 500 });
 
       // 4. the garden reacts

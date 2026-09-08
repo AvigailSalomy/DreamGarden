@@ -11,8 +11,30 @@ export interface WorldSize {
   h: number;
 }
 
-export const ZOOM_MIN = 0.85;
 export const ZOOM_MAX = 1.5;
+/** Absolute lower bound; the *effective* minimum is computed from the viewport. */
+export const ZOOM_MIN = 0.32;
+
+/** The chunk of world we want a player to be able to see at the widest zoom. */
+export const OVERVIEW_W = 1900;
+export const OVERVIEW_H = 1600;
+
+/**
+ * A responsive minimum zoom: small enough that most of the neglected garden fits
+ * on screen at once, but not so small that everything turns to specks. Wider
+ * viewports (desktop) get a higher minimum because they already show a lot.
+ */
+export function computeMinZoom(
+  viewW: number,
+  viewH: number,
+  overviewW = OVERVIEW_W,
+  overviewH = OVERVIEW_H,
+  floor = ZOOM_MIN,
+  ceil = 0.9,
+): number {
+  const fit = Math.min(viewW / overviewW, viewH / overviewH);
+  return Math.min(ceil, Math.max(floor, fit));
+}
 
 export function clampZoom(z: number, min = ZOOM_MIN, max = ZOOM_MAX): number {
   return Math.min(max, Math.max(min, z));
@@ -58,7 +80,7 @@ export function zoomAroundPoint(
 }
 
 /** Frame-rate-independent exponential decay of a velocity component. */
-export function decayVelocity(v: number, dtMs: number, damping = 0.92): number {
+export function decayVelocity(v: number, dtMs: number, damping = 0.9): number {
   const next = v * Math.pow(damping, dtMs / 16.667);
   return Math.abs(next) < 0.01 ? 0 : next;
 }
@@ -68,7 +90,7 @@ export function isDragGesture(
   dx: number,
   dy: number,
   dtMs: number,
-  moveThreshold = 10,
+  moveThreshold = 7,
   timeThreshold = 320,
 ): boolean {
   return Math.hypot(dx, dy) > moveThreshold || dtMs > timeThreshold;
