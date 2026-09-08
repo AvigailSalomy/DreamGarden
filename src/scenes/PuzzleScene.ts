@@ -40,10 +40,10 @@ export class PuzzleScene extends Phaser.Scene {
 
     // dim veil over the paused garden
     const veil = this.add
-      .rectangle(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, 0x241a2e, 0.55)
+      .rectangle(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT, 0x2a2036, 0.5)
       .setOrigin(0, 0);
     const wash = this.add.graphics();
-    wash.fillGradientStyle(COLORS.skyTop, COLORS.skyTop, COLORS.skyLow, COLORS.skyLow, 0.16);
+    wash.fillGradientStyle(COLORS.skyTop, COLORS.skyTop, COLORS.skyLow, COLORS.skyLow, 0.18);
     wash.fillRect(0, 0, DESIGN_WIDTH, DESIGN_HEIGHT);
     this.root.add([veil, wash]);
 
@@ -51,24 +51,27 @@ export class PuzzleScene extends Phaser.Scene {
     const grid = def.puzzle.grids[puzzleIndex];
 
     const title = this.add
-      .text(DESIGN_WIDTH / 2, 78, `Bring back ${def.name.split(" ")[0]}`, titleStyle(30))
+      .text(DESIGN_WIDTH / 2, 74, `Bring back ${def.name.split(" ")[0]}`, {
+        ...titleStyle(30),
+        color: "#fef6e8",
+      })
       .setOrigin(0.5);
     const sub = this.add
       .text(
         DESIGN_WIDTH / 2,
-        116,
+        112,
         def.puzzles_required > 1
           ? `Puzzle ${puzzleIndex + 1} of ${def.puzzles_required}  ·  ${grid.cols}×${grid.rows}`
           : `Piece the picture together  ·  ${grid.cols}×${grid.rows}`,
-        bodyStyle(18),
+        bodyStyle(18, "#e9dcc8"),
       )
       .setOrigin(0.5);
     this.root.add([title, sub]);
 
     const boardSize = Phaser.Math.Clamp(
-      Math.min(DESIGN_WIDTH - 96, DESIGN_HEIGHT * 0.44),
+      Math.min(DESIGN_WIDTH - 110, DESIGN_HEIGHT * 0.42),
       300,
-      540,
+      520,
     );
 
     this.board = new PuzzleBoard(this, {
@@ -83,12 +86,12 @@ export class PuzzleScene extends Phaser.Scene {
     });
 
     // hint + back
-    const hint = new Button(this, DESIGN_WIDTH / 2, DESIGN_HEIGHT - 70, {
-      width: 200,
-      height: 78,
+    const hint = new Button(this, DESIGN_WIDTH / 2, DESIGN_HEIGHT - 58, {
+      width: 168,
+      height: 68,
       label: "Hint",
       variant: "cream",
-      fontSize: 26,
+      fontSize: 24,
       onClick: () => this.board?.hint(),
     });
     const back = this.add

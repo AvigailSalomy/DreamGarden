@@ -10,7 +10,7 @@ export function startGame(): Phaser.Game {
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent: "app",
-    backgroundColor: "#1c1526",
+    backgroundColor: "#c9b8e8",
     width: DESIGN_WIDTH,
     height: DESIGN_HEIGHT,
     roundPixels: false,

@@ -25,6 +25,12 @@ export class UIScene extends Phaser.Scene {
   private playBtn!: Button;
   private cardHidden = false;
 
+  private readonly cardW = 690;
+  private readonly cardH = 286;
+  private get cardRestY(): number {
+    return DESIGN_HEIGHT - this.cardH / 2 - 16;
+  }
+
   private offFns: Array<() => void> = [];
 
   constructor() {
@@ -178,48 +184,50 @@ export class UIScene extends Phaser.Scene {
   /* ---------------- task card ---------------- */
 
   private buildTaskCard(): void {
-    const w = 672;
-    const h = 250;
-    const cx = DESIGN_WIDTH / 2;
-    const cy = DESIGN_HEIGHT - h / 2 - 20;
-    this.card = this.add.container(cx, cy).setDepth(90);
+    const w = this.cardW;
+    const h = this.cardH;
+    this.card = this.add.container(DESIGN_WIDTH / 2, this.cardRestY).setDepth(90);
 
     const panel = makePanel(this, w, h);
     this.card.add(panel);
 
-    // thumbnail
-    const thumbBg = makePanel(this, 150, 150, { radius: 75, highlight: false });
-    thumbBg.setPosition(-w / 2 + 96, -6);
-    this.cardThumb = this.add
-      .image(-w / 2 + 96, 2, "rabbit")
-      .setOrigin(0.5, 0.5)
-      .setScale(0.62);
+    // thumbnail (left)
+    const thumbR = 68;
+    const thumbX = -w / 2 + 92;
+    const thumbBg = makePanel(this, thumbR * 2, thumbR * 2, { radius: thumbR, highlight: false });
+    thumbBg.setPosition(thumbX, -10);
+    this.cardThumb = this.add.image(thumbX, -4, "rabbit").setOrigin(0.5, 0.5).setScale(0.56);
     this.cardThumbQ = this.add
-      .text(-w / 2 + 96, -6, "?", {
+      .text(thumbX, -10, "?", {
         fontFamily: FONT_FAMILY,
         fontStyle: "700",
-        fontSize: "56px",
+        fontSize: "52px",
         color: "#fef6e8",
       })
       .setOrigin(0.5);
     this.card.add([thumbBg, this.cardThumb, this.cardThumbQ]);
 
-    const textX = -w / 2 + 190;
-    this.cardTitle = this.add.text(textX, -h / 2 + 26, "", titleStyle(30)).setOrigin(0, 0);
-    this.cardStory = this.add
-      .text(textX, -h / 2 + 74, "", { ...bodyStyle(19), wordWrap: { width: 300 } })
-      .setOrigin(0, 0);
-    this.pips = this.add.graphics();
-    this.card.add([this.cardTitle, this.cardStory, this.pips]);
-
-    this.playBtn = new Button(this, w / 2 - 128, 8, {
-      width: 196,
-      height: 104,
+    // Play (tall pill, right)
+    const playW = 176;
+    this.playBtn = new Button(this, w / 2 - playW / 2 - 18, -2, {
+      width: playW,
+      height: 172,
       label: "Play",
       fontSize: 34,
       onClick: () => this.onPlay(),
     });
     this.card.add(this.playBtn);
+
+    // text column (between thumb and Play)
+    const textX = thumbX + thumbR + 22;
+    const playLeft = w / 2 - playW - 18;
+    const wrap = playLeft - textX - 16;
+    this.cardTitle = this.add.text(textX, -h / 2 + 24, "", titleStyle(26)).setOrigin(0, 0);
+    this.cardStory = this.add
+      .text(textX, -h / 2 + 64, "", { ...bodyStyle(16), wordWrap: { width: wrap } })
+      .setOrigin(0, 0);
+    this.pips = this.add.graphics();
+    this.card.add([this.cardTitle, this.cardStory, this.pips]);
   }
 
   private onPlay(): void {
@@ -263,8 +271,8 @@ export class UIScene extends Phaser.Scene {
     const req = required ?? vm?.required ?? 0;
     const g = this.pips;
     g.clear();
-    const x0 = -672 / 2 + 190;
-    const y = 250 / 2 - 44;
+    const x0 = -this.cardW / 2 + 152;
+    const y = this.cardH / 2 - 38;
     const r = 11;
     const gap = 34;
     for (let i = 0; i < req; i++) {
@@ -301,7 +309,7 @@ export class UIScene extends Phaser.Scene {
     this.cardHidden = false;
     this.tweens.add({
       targets: this.card,
-      y: DESIGN_HEIGHT - 250 / 2 - 20,
+      y: this.cardRestY,
       duration: 380,
       ease: "Back.easeOut",
     });

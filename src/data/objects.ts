@@ -29,7 +29,7 @@ export const RABBIT: GardenObjectDef = {
   movement_bounds: { shape: "rect", x: 505, y: 1010, w: 420, h: 240 },
 
   story_text:
-    "A soft rustle stirs the dry grass. Something small and gentle is waiting at the meadow's edge, hoping this garden might feel like home again.",
+    "Something small and gentle waits at the meadow's edge, hoping this garden could feel like home.",
   unlock_toast: "Nibs hops into the meadow and settles in.",
 };
 
