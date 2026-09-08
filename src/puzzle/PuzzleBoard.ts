@@ -111,18 +111,19 @@ export class PuzzleBoard {
       rng,
     );
 
+    // small puzzles read best 2-wide; larger ones pack 3-wide and a touch smaller
+    const perRowTarget = total <= 4 ? 2 : 3;
     const trayScale = Phaser.Math.Clamp(
-      (this.scene.scale.width - 60) / (Math.min(total, 4) * (this.cellW + 12)),
-      0.42,
-      0.7,
+      (this.scene.scale.width - 56) / (perRowTarget * (this.cellW + 12)),
+      total <= 4 ? 0.42 : 0.36,
+      total <= 4 ? 0.7 : 0.6,
     );
     const trayItemW = this.cellW * trayScale + 12;
     const trayItemH = this.cellH * trayScale + 12;
-    // Small tutorial puzzles (<=4) read best as a tidy 2-wide tray, not 3+1.
     const trayMaxW =
-      total <= 4 ? trayItemW * 2 + 24 : this.scene.scale.width - 56;
+      total <= 4 ? trayItemW * 2 + 24 : Math.min(this.scene.scale.width - 48, perRowTarget * trayItemW + 24);
     const slots = trayLayout(total, trayItemW, trayItemH, 6, trayMaxW);
-    const trayTop = centerY + boardSize / 2 + 78;
+    const trayTop = centerY + boardSize / 2 + (total > 4 ? 50 : 74);
 
     for (let i = 0; i < order.length; i++) {
       const solutionIndex = order[i];
@@ -225,6 +226,22 @@ export class PuzzleBoard {
     this.scene.cameras.main.flash(220, 255, 253, 245);
 
     this.scene.time.delayedCall(950, () => this.o.onSolved());
+  }
+
+  /**
+   * Dev/test introspection: for every not-yet-placed tile, its current scene
+   * position and the scene position of the cell it belongs in. Lets a smoke test
+   * drive real drag interactions instead of only calling forceSolve().
+   */
+  dragTargets(): Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> {
+    const out: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = [];
+    for (const tile of this.tiles) {
+      if (tile.placed) continue;
+      const cell = this.cells.find((c) => c.index === tile.solutionIndex);
+      if (!cell) continue;
+      out.push({ from: { x: tile.x, y: tile.y }, to: { x: cell.x, y: cell.y } });
+    }
+    return out;
   }
 
   /** Dev/demo helper: snap every remaining tile home and trigger the solve. */

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="280" viewBox="0 0 380 280">
+  <defs>
+    <linearGradient id="ev" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdf3e0"/>
+      <stop offset="1" stop-color="#f0e0c4"/>
+    </linearGradient>
+    <linearGradient id="evf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbeed7"/>
+      <stop offset="1" stop-color="#f3e4c8"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="190" cy="262" rx="150" ry="16" fill="#46323c" opacity="0.16"/>
+
+  <!-- pocket -->
+  <rect x="30" y="60" width="320" height="196" rx="16" fill="url(#ev)" stroke="#d9c39c" stroke-width="4"/>
+  <path d="M34,240 L150,150 L230,150 L346,240" fill="none" stroke="#e2cfa8" stroke-width="4"/>
+
+  <!-- botanical sprigs in the corners -->
+  <g stroke="#9cbf86" stroke-width="4" fill="none" stroke-linecap="round">
+    <path d="M52,232 C 44,210 48,190 40,170"/>
+    <path d="M328,232 C 336,210 332,190 340,170"/>
+  </g>
+  <g fill="#9ec98a">
+    <ellipse cx="40" cy="176" rx="8" ry="13" transform="rotate(-24 40 176)"/>
+    <ellipse cx="54" cy="200" rx="7" ry="12" transform="rotate(20 54 200)"/>
+    <ellipse cx="340" cy="176" rx="8" ry="13" transform="rotate(24 340 176)"/>
+    <ellipse cx="326" cy="200" rx="7" ry="12" transform="rotate(-20 326 200)"/>
+  </g>
+
+  <!-- flap -->
+  <path d="M30,72 L190,182 L350,72 C 350,64 344,58 336,58 L44,58 C 36,58 30,64 30,72 Z"
+        fill="url(#evf)" stroke="#d9c39c" stroke-width="4"/>
+
+  <!-- wax clover seal -->
+  <circle cx="190" cy="150" r="26" fill="#c06b74" stroke="#a2545d" stroke-width="3"/>
+  <g fill="#a2545d">
+    <circle cx="190" cy="142" r="7"/><circle cx="183" cy="153" r="7"/><circle cx="197" cy="153" r="7"/>
+    <rect x="188" y="150" width="4" height="12" rx="2"/>
+  </g>
+  <circle cx="182" cy="142" r="5" fill="#d98a91" opacity="0.7"/>
+</svg>

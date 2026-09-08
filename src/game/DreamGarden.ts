@@ -5,6 +5,7 @@ import { MenuScene } from "../scenes/MenuScene";
 import { IntroScene } from "../scenes/IntroScene";
 import { GardenScene } from "../scenes/GardenScene";
 import { PuzzleScene } from "../scenes/PuzzleScene";
+import { LetterScene } from "../scenes/LetterScene";
 import { UIScene } from "../scenes/UIScene";
 
 export function startGame(): Phaser.Game {
@@ -30,6 +31,7 @@ export function startGame(): Phaser.Game {
       GardenScene,
       PuzzleScene,
       UIScene,
+      LetterScene, // on top of the HUD — the letter is a modal storybook beat
     ],
   });
 }

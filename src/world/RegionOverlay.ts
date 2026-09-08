@@ -9,6 +9,13 @@ export interface RegionRect {
   h: number;
 }
 
+export interface RegionOverlayOpts {
+  /** How many bloom-in flowers scatter across the region. */
+  flowerCount?: number;
+  /** Tints applied at random to the bloom-in flowers (e.g. pink / gold / violet). */
+  flowerTints?: number[];
+}
+
 /**
  * A plain grey "still asleep" wash for a region we haven't wired up yet — signals
  * to the player that the garden extends here and will come alive later. No bloom.
@@ -40,6 +47,7 @@ export class RegionOverlay {
     private scene: Phaser.Scene,
     rect: RegionRect,
     seed: number,
+    opts: RegionOverlayOpts = {},
   ) {
     this.lush = scene.add
       .image(rect.x, rect.y, "meadow_lush")
@@ -47,7 +55,6 @@ export class RegionOverlay {
       .setAlpha(0)
       .setDisplaySize(rect.w * 1.25, rect.h * 1.35);
 
-    // soft-edged neglect veil (reuses the blurred meadow blob, tinted cool grey)
     this.veil = scene.add
       .image(rect.x, rect.y - 20, "meadow_lush")
       .setDepth(120)
@@ -57,7 +64,9 @@ export class RegionOverlay {
       .setBlendMode(Phaser.BlendModes.MULTIPLY);
 
     const rng = new Phaser.Math.RandomDataGenerator([String(seed)]);
-    for (let i = 0; i < 7; i++) {
+    const count = opts.flowerCount ?? 7;
+    const tints = opts.flowerTints ?? [];
+    for (let i = 0; i < count; i++) {
       const f = scene.add
         .image(
           rect.x + rng.between(-rect.w / 2, rect.w / 2),
@@ -67,6 +76,7 @@ export class RegionOverlay {
         .setDepth(3)
         .setScale(0)
         .setAlpha(0);
+      if (tints.length) f.setTint(tints[rng.between(0, tints.length - 1)]);
       f.setData("swayPhase", rng.realInRange(0, Math.PI * 2));
       this.flowers.push(f);
     }

@@ -107,10 +107,11 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
-  /** Route into the game: fresh gardens see the intro; returning players skip it. */
+  /** Route into the game: a fresh garden sees the intro; returning players skip it. */
   private enter(forceIntro: boolean): void {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.relayout, this);
-    if (forceIntro || !save.state.introSeen) {
+    const fresh = !save.state.introSeen || !save.state.openingGardenTourSeen;
+    if (forceIntro || fresh) {
       this.scene.start("Intro");
     } else {
       this.scene.start("Garden");

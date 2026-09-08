@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="440" viewBox="0 0 340 440">
+  <defs>
+    <linearGradient id="oak" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a7355"/>
+      <stop offset="1" stop-color="#6d5942"/>
+    </linearGradient>
+  </defs>
+  <ellipse cx="170" cy="426" rx="110" ry="16" fill="#46323c" opacity="0.16"/>
+
+  <!-- trunk -->
+  <path d="M140,428 C 132,340 128,280 140,220 C 148,178 132,140 150,96 C 158,74 168,60 172,44
+           C 178,64 190,90 196,132 C 202,180 188,220 196,270 C 202,330 210,380 204,428 Z"
+        fill="url(#oak)" stroke="#5c4a37" stroke-width="4"/>
+
+  <!-- bare limbs -->
+  <g stroke="#7a6450" stroke-width="16" fill="none" stroke-linecap="round">
+    <path d="M150,190 C 110,168 84,128 66,84"/>
+    <path d="M190,170 C 232,150 262,110 284,66"/>
+    <path d="M160,120 C 150,90 150,60 160,28"/>
+    <path d="M150,250 C 116,236 92,208 78,176"/>
+    <path d="M196,240 C 232,226 256,204 272,172"/>
+  </g>
+  <g stroke="#7a6450" stroke-width="8" fill="none" stroke-linecap="round">
+    <path d="M66,84 C 54,66 40,54 24,44"/>
+    <path d="M284,66 C 296,50 310,40 326,32"/>
+    <path d="M160,28 C 150,16 150,10 150,4"/>
+    <path d="M160,28 C 172,14 180,10 188,4"/>
+    <path d="M78,176 C 66,160 52,152 38,146"/>
+    <path d="M272,172 C 286,158 298,152 312,148"/>
+  </g>
+
+  <!-- a couple of stubborn dry leaves + a hole -->
+  <ellipse cx="70" cy="92" rx="9" ry="14" fill="#9a8154" transform="rotate(-30 70 92)"/>
+  <ellipse cx="282" cy="72" rx="9" ry="14" fill="#9a8154" transform="rotate(28 282 72)"/>
+  <ellipse cx="168" cy="300" rx="12" ry="16" fill="#4c3d2c"/>
+  <path d="M118,410 q-6,-18 4,-32" stroke="#7c9564" stroke-width="5" fill="none" opacity="0.7"/>
+</svg>

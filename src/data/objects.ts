@@ -2,8 +2,10 @@ import type { GardenObjectDef } from "./types";
 
 /**
  * The unlockable catalog, ordered by `unlock_order`. Everything about an object —
- * its puzzle, where it lives, how it enters, how it idles, its reward — is data here.
- * Adding the next object = adding a row + one or two pictures. No new code paths.
+ * its puzzle, where it lives, how it enters, how it idles, its letter, its reward —
+ * is data here. Adding the next restoration = adding a row + one or two pictures.
+ *
+ * Milestone 3 progression:  Rabbit → Wildflowers → Songbird
  */
 export const RABBIT: GardenObjectDef = {
   id: "rabbit",
@@ -18,7 +20,6 @@ export const RABBIT: GardenObjectDef = {
   layer: "actors",
 
   puzzles_required: 1,
-  // Tutorial puzzle: 4 pieces (2x2). Calm first win — generous snap radius.
   puzzle: { image: "rabbit_portrait", grids: [{ cols: 2, rows: 2 }], snapRadiusFactor: 0.62 },
 
   reward_coins: 15,
@@ -28,9 +29,52 @@ export const RABBIT: GardenObjectDef = {
   idle_behavior: "rabbit_hop",
   movement_bounds: { shape: "rect", x: 900, y: 1500, w: 460, h: 260 },
 
+  letter: {
+    body:
+      "A tiny visitor is hiding near the meadow.\n" +
+      "I think he's waiting for the garden to feel safe again.\n" +
+      "Can you bring Nibs home?",
+    button: "Let's Help",
+  },
+  overview_text: "The meadow breathes again — Nibs is home.",
   story_text:
     "Something small and gentle waits at the meadow's edge, hoping this garden could feel like home.",
   unlock_toast: "Nibs hops into the meadow and settles in.",
+};
+
+export const WILDFLOWERS: GardenObjectDef = {
+  id: "wildflowers",
+  name: "Wildflower Bed",
+  category: "plant",
+  tier: "common",
+
+  garden_sprite: "wildflower_bed",
+  garden_position: { x: 340, y: 1648 },
+  garden_scale: 1.05,
+  region: "flowerBed",
+  layer: "back",
+
+  puzzles_required: 1,
+  // 2x2 = 4 pieces; the picture reconstructs the restored bloom.
+  puzzle: { image: "wildflowers_portrait", grids: [{ cols: 2, rows: 2 }], snapRadiusFactor: 0.62 },
+
+  reward_coins: 30,
+  unlock_order: 1,
+
+  reveal_animation: "bloom_wave",
+  idle_behavior: "plant_sway",
+
+  letter: {
+    body:
+      "The old flower bed has forgotten its colors.\n" +
+      "But beneath the dry soil, something is still waiting.\n" +
+      "Let's help it bloom.",
+    button: "Let's Help",
+  },
+  overview_text: "Colour spills back across the old bed.",
+  story_text:
+    "The flower bed is dry and grey, but the roots underneath still remember how to bloom.",
+  unlock_toast: "The wildflower bed bursts into pink, gold and violet.",
 };
 
 export const BIRD: GardenObjectDef = {
@@ -40,24 +84,34 @@ export const BIRD: GardenObjectDef = {
   tier: "common",
 
   garden_sprite: "bird",
-  garden_position: { x: 1560, y: 1360 },
+  garden_position: { x: 1750, y: 1182 }, // perched on the cottage-yard fence rail
   garden_scale: 1.0,
   region: "cottageYard",
   layer: "actors",
 
   puzzles_required: 1,
-  puzzle: { image: "bird_portrait", grids: [{ cols: 2, rows: 2 }], snapRadiusFactor: 0.6 },
+  // 2x3 = 6 pieces (reuses the same drag-and-snap engine, just a bigger grid).
+  puzzle: { image: "bird_portrait", grids: [{ cols: 2, rows: 3 }], snapRadiusFactor: 0.58 },
 
   reward_coins: 15,
-  unlock_order: 1,
+  unlock_order: 2,
 
-  reveal_animation: "hop_in",
-  idle_behavior: "bird_ground",
-  movement_bounds: { shape: "rect", x: 1560, y: 1360, w: 360, h: 190 },
+  reveal_animation: "fly_in_perch",
+  idle_behavior: "bird_perch",
+  // aerial box for the occasional short takeoff-and-return flight
+  movement_bounds: { shape: "rect", x: 1750, y: 1110, w: 460, h: 300 },
 
+  letter: {
+    body:
+      "The old perch has been silent for too long.\n" +
+      "I found a feather beneath the arch this morning.\n" +
+      "Perhaps Pip is ready to return.",
+    button: "Begin",
+  },
+  overview_text: "A first bright note drifts over the garden.",
   story_text:
-    "The old fence has been silent for years. A little song is trying to find its way back to it.",
-  unlock_toast: "Pip lands on the fence and tries a first note.",
+    "The fence rail by the archway has held no song for years. Something small still wants to sing there.",
+  unlock_toast: "Pip glides down to the fence rail and tries a first note.",
 };
 
-export const CATALOG: GardenObjectDef[] = [RABBIT, BIRD];
+export const CATALOG: GardenObjectDef[] = [RABBIT, WILDFLOWERS, BIRD];

@@ -67,9 +67,14 @@ export class PuzzleScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.root.add([title, sub]);
 
+    const cells = grid.cols * grid.rows;
     const availH = H - inset.top - inset.bottom;
-    const boardSize = Phaser.Math.Clamp(Math.min(W - 96, availH * 0.46), 280, 520);
-    const centerY = topY + 60 + boardSize / 2;
+    const boardSize = Phaser.Math.Clamp(
+      Math.min(W - 100, availH * (cells > 4 ? 0.4 : 0.46)),
+      230,
+      cells > 4 ? 420 : 520,
+    );
+    const centerY = topY + (cells > 4 ? 50 : 60) + boardSize / 2;
 
     this.board = new PuzzleBoard(this, {
       texKey: def.puzzle.image,
@@ -109,7 +114,10 @@ export class PuzzleScene extends Phaser.Scene {
     this.cameras.main.fadeIn(220, 36, 26, 46);
 
     if (import.meta.env.DEV) {
-      (window as unknown as { __dgSolve?: () => void }).__dgSolve = () => this.board?.forceSolve();
+      const w = window as unknown as Record<string, unknown>;
+      w.__dgSolve = () => this.board?.forceSolve();
+      w.__dgPuzzleDrag = () => this.board?.dragTargets() ?? [];
+      w.__dgPuzzleGrid = () => `${grid.cols}x${grid.rows}`;
     }
   }
 

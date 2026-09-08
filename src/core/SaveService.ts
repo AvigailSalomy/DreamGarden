@@ -8,23 +8,39 @@ export function freshSave(): SaveState {
     coins: 0,
     currentTaskIndex: 0,
     introSeen: false,
+    openingGardenTourSeen: false,
+    lettersSeen: {},
     objects: {},
     stats: { puzzlesSolved: 0, startedAt: now, lastPlayed: now },
   };
 }
 
-/** Bring any older / partial blob up to the current shape without losing data. */
+/**
+ * Bring any older / partial blob up to the current shape without losing data.
+ * Milestone 2 saves (no openingGardenTourSeen / lettersSeen) load fine: a player
+ * who already has progress is treated as having seen the opening tour so it never
+ * replays for them.
+ */
 export function migrate(data: unknown): SaveState {
   const base = freshSave();
   if (!data || typeof data !== "object") return base;
   const d = data as Partial<SaveState>;
+
+  const objects = d.objects && typeof d.objects === "object" ? d.objects : {};
+  const hadProgress =
+    (typeof d.currentTaskIndex === "number" && d.currentTaskIndex > 0) ||
+    Object.keys(objects).length > 0;
+
   return {
     saveVersion: SAVE_VERSION,
     coins: typeof d.coins === "number" ? d.coins : base.coins,
     currentTaskIndex:
       typeof d.currentTaskIndex === "number" ? d.currentTaskIndex : base.currentTaskIndex,
     introSeen: !!d.introSeen,
-    objects: d.objects && typeof d.objects === "object" ? d.objects : {},
+    openingGardenTourSeen: !!d.openingGardenTourSeen || hadProgress,
+    lettersSeen:
+      d.lettersSeen && typeof d.lettersSeen === "object" ? d.lettersSeen : {},
+    objects,
     stats: { ...base.stats, ...(d.stats ?? {}) },
   };
 }

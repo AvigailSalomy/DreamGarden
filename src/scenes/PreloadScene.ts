@@ -38,12 +38,20 @@ export class PreloadScene extends Phaser.Scene {
     svg("crate", 200, 170);
     svg("pond_dry", 380, 200);
     svg("signpost", 150, 190);
+    svg("heart_dormant", 220, 240);
+    svg("oak_dead", 340, 440);
 
-    // creatures + puzzle pictures
+    // restorations + puzzle pictures
     svg("rabbit", 220, 250);
     svg("rabbit_portrait", 900, 900);
     svg("bird", 150, 160);
     svg("bird_portrait", 900, 900);
+    svg("wildflower_bed", 300, 260);
+    svg("wildflowers_portrait", 900, 900);
+
+    // letter system
+    svg("envelope", 420, 310);
+    svg("letter_paper", 460, 560);
 
     // fx + ui
     svg("spark", 48, 48);

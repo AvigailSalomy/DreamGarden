@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="540" viewBox="0 0 440 540">
+  <defs>
+    <linearGradient id="lp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#f6ead2"/>
+    </linearGradient>
+  </defs>
+  <rect x="14" y="18" width="412" height="508" rx="14" fill="#46323c" opacity="0.12"/>
+  <rect x="10" y="10" width="420" height="516" rx="14" fill="url(#lp)" stroke="#e6d3ac" stroke-width="4"/>
+  <rect x="26" y="26" width="388" height="484" rx="10" fill="none" stroke="#e9d9b6" stroke-width="2"/>
+
+  <!-- faint botanical border flourishes -->
+  <g stroke="#cdd9b4" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.9">
+    <path d="M40,58 C 66,44 96,48 118,64"/>
+    <path d="M400,58 C 374,44 344,48 322,64"/>
+    <path d="M40,482 C 66,496 96,492 118,476"/>
+    <path d="M400,482 C 374,496 344,492 322,476"/>
+  </g>
+  <g fill="#d8e3c1" opacity="0.9">
+    <ellipse cx="60" cy="52" rx="7" ry="11" transform="rotate(-30 60 52)"/>
+    <ellipse cx="380" cy="52" rx="7" ry="11" transform="rotate(30 380 52)"/>
+    <ellipse cx="60" cy="488" rx="7" ry="11" transform="rotate(30 60 488)"/>
+    <ellipse cx="380" cy="488" rx="7" ry="11" transform="rotate(-30 380 488)"/>
+  </g>
+  <g fill="#f3cfd9" opacity="0.85">
+    <circle cx="120" cy="66" r="4"/><circle cx="320" cy="66" r="4"/>
+  </g>
+</svg>

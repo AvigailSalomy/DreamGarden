@@ -16,10 +16,13 @@ export type IdleBehaviorId =
   | "water_shimmer"
   | "rabbit_hop"
   | "bird_ground"
+  | "bird_perch"
   | "butterfly_flit";
 
 export type RevealAnimationId =
   | "hop_in"
+  | "fly_in_perch"
+  | "bloom_wave"
   | "scale_bloom"
   | "drop_settle"
   | "ripple_in"
@@ -41,6 +44,12 @@ export interface PuzzleConfig {
   grids: GridSize[];
   /** Fraction of a cell used as the snap radius. Default 0.55. */
   snapRadiusFactor?: number;
+}
+
+/** A task letter — one reusable envelope/letter presentation, driven entirely by data. */
+export interface LetterConfig {
+  body: string;
+  button?: string;
 }
 
 export interface GardenObjectDef {
@@ -65,6 +74,11 @@ export interface GardenObjectDef {
   idle_behavior: IdleBehaviorId;
   movement_bounds?: MovementBounds;
 
+  /** Envelope text shown when this restoration becomes the active task. */
+  letter: LetterConfig;
+  /** One short line shown right after the reveal, before the camera guides onward. */
+  overview_text?: string;
+
   story_text: string;
   unlock_toast?: string;
 }
@@ -81,6 +95,10 @@ export interface SaveState {
   coins: number;
   currentTaskIndex: number;
   introSeen: boolean;
+  /** The one-time cinematic tour of the neglected garden (fresh game only). */
+  openingGardenTourSeen: boolean;
+  /** Per-object: has the player opened its task letter yet. */
+  lettersSeen: Record<string, boolean>;
   objects: Record<string, ObjectProgress>;
   stats: {
     puzzlesSolved: number;

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="240" viewBox="0 0 220 240">
+  <ellipse cx="110" cy="230" rx="80" ry="12" fill="#46323c" opacity="0.16"/>
+  <!-- pedestal -->
+  <path d="M56,232 L60,196 L160,196 L164,232 Z" fill="#c3bdcf" stroke="#a49db4" stroke-width="3"/>
+  <rect x="52" y="182" width="116" height="18" rx="6" fill="#d6d2de" stroke="#a49db4" stroke-width="3"/>
+  <!-- dormant heart under a draped cloth -->
+  <path d="M110,176 C 60,150 44,110 62,84 C 78,62 104,66 110,92 C 116,66 142,62 158,84 C 176,110 160,150 110,176 Z"
+        fill="#8f8aa0" stroke="#726d84" stroke-width="3"/>
+  <path d="M40,96 C 60,78 90,72 110,88 C 130,72 160,78 180,96 C 176,132 150,160 110,168 C 70,160 44,132 40,96 Z"
+        fill="#b7b2c6" stroke="#9a94ad" stroke-width="3" opacity="0.95"/>
+  <path d="M40,96 C 70,110 150,110 180,96" fill="none" stroke="#9a94ad" stroke-width="3"/>
+  <path d="M64,150 q-6,-16 2,-30" stroke="#7c9564" stroke-width="4" fill="none" opacity="0.7"/>
+  <path d="M156,150 q6,-16 -2,-30" stroke="#7c9564" stroke-width="4" fill="none" opacity="0.7"/>
+</svg>
