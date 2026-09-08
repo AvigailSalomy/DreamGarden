@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640">
+  <defs>
+    <radialGradient id="ml" cx="0.5" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#93cd7c"/>
+      <stop offset="0.7" stop-color="#8fc77a"/>
+      <stop offset="1" stop-color="#8fc77a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="mlb" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+  </defs>
+  <path filter="url(#mlb)" fill="url(#ml)" d="M120,340
+    C 120,180 320,120 520,140
+    C 760,164 900,240 880,400
+    C 860,540 640,600 440,580
+    C 220,558 120,500 120,340 Z"/>
+</svg>

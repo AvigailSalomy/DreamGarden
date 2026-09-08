@@ -1,0 +1,30 @@
+import { Emitter } from "../core/EventBus";
+import type { GameEvents } from "../core/events";
+import { SaveService } from "../core/SaveService";
+import { EconomyService } from "../core/EconomyService";
+import { ProgressionService } from "../core/ProgressionService";
+import { CATALOG } from "../data/objects";
+import { SAVE_KEY } from "./config";
+
+/** `?reset` on the URL wipes the save before anything reads it (handy for demos). */
+if (typeof location !== "undefined" && /(?:\?|&)reset\b/.test(location.search)) {
+  try {
+    localStorage.removeItem(SAVE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export const bus = new Emitter<GameEvents>();
+export const save = new SaveService();
+export const economy = new EconomyService(save, bus);
+export const progression = new ProgressionService(save, economy, bus, CATALOG);
+
+/** Persist on the way out — presentation may be mid-animation, truth is already safe. */
+if (typeof window !== "undefined") {
+  const flush = () => save.saveNow();
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flush();
+  });
+  window.addEventListener("pagehide", flush);
+}

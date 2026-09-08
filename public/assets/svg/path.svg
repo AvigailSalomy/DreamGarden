@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1500" viewBox="0 0 900 1500">
+  <defs>
+    <linearGradient id="p" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c39a76"/>
+      <stop offset="0.5" stop-color="#d8b892"/>
+      <stop offset="1" stop-color="#c39a76"/>
+    </linearGradient>
+    <filter id="ps" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+  </defs>
+  <path filter="url(#ps)" fill="#b2895f" opacity="0.5" d="M470,1500
+    C 430,1180 250,1010 300,760
+    C 340,560 520,470 470,240
+    C 450,150 470,60 500,0 L 700,0
+    C 660,120 640,240 660,420
+    C 690,660 520,780 500,980
+    C 486,1160 640,1320 640,1500 Z"/>
+  <path fill="url(#p)" d="M470,1500
+    C 440,1200 270,1020 320,780
+    C 356,580 520,486 476,260
+    C 458,170 476,70 504,0 L 676,0
+    C 640,130 626,250 644,430
+    C 672,660 512,786 494,980
+    C 480,1150 626,1320 626,1500 Z"/>
+  <g fill="#b89072" opacity="0.55">
+    <ellipse cx="430" cy="1200" rx="20" ry="12"/>
+    <ellipse cx="540" cy="900" rx="16" ry="10"/>
+    <ellipse cx="470" cy="560" rx="22" ry="13"/>
+    <ellipse cx="560" cy="250" rx="15" ry="9"/>
+  </g>
+</svg>

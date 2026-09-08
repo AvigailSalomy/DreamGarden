@@ -1,0 +1,25 @@
+{
+  "name": "dreamgarden",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "DreamGarden - a cozy magical garden restoration game (university final project MVP)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@fontsource/baloo-2": "5.2.5",
+    "phaser": "3.87.0"
+  },
+  "devDependencies": {
+    "jsdom": "25.0.1",
+    "typescript": "5.6.3",
+    "vite": "6.0.11",
+    "vitest": "2.1.9"
+  }
+}

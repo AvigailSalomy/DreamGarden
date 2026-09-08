@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="560" viewBox="0 0 460 560">
+  <defs>
+    <linearGradient id="aw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d3a878"/>
+      <stop offset="1" stop-color="#a97e54"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#aw)" stroke="#8f6444" stroke-width="5">
+    <path d="M60,540 V170 C 60,70 160,26 230,26 C 300,26 400,70 400,170 V540 h-40 V176
+      C 360,96 286,64 230,64 C 174,64 100,96 100,176 V540 Z"/>
+    <rect x="46" y="520" width="68" height="30" rx="8"/>
+    <rect x="346" y="520" width="68" height="30" rx="8"/>
+  </g>
+  <g stroke="#7c9564" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.85">
+    <path d="M92,520 C 78,460 96,410 82,350 C 72,300 92,260 84,210"/>
+    <path d="M372,520 C 386,456 366,404 382,344 C 392,296 372,258 384,206"/>
+    <path d="M120,120 C 160,90 220,86 250,110"/>
+  </g>
+  <g fill="#8aa876" opacity="0.8">
+    <ellipse cx="84" cy="360" rx="9" ry="16" transform="rotate(-20 84 360)"/>
+    <ellipse cx="380" cy="356" rx="9" ry="16" transform="rotate(18 380 356)"/>
+    <ellipse cx="150" cy="104" rx="9" ry="15" transform="rotate(-10 150 104)"/>
+  </g>
+</svg>
