@@ -2,7 +2,9 @@ import type { GridSize } from "../puzzle/slice";
 
 /** The full set of cross-scene events. Payloads are data only — never Phaser objects. */
 export interface GameEvents {
-  "puzzle:start": { objectId: string };
+  /** `force` = an explicit user action (e.g. the Requests "Complete Puzzle" button) that
+   *  must launch the puzzle even if a stale entry-flow flag is still set. */
+  "puzzle:start": { objectId: string; force?: boolean };
   "puzzle:closed": { objectId: string; solved: boolean; unlockedNow: boolean };
   "puzzle:solved": { objectId: string; puzzleIndex: number; grid: GridSize };
   "progress:updated": {

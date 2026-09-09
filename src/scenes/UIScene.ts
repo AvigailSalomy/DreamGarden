@@ -26,8 +26,10 @@ export class UIScene extends Phaser.Scene {
   private cardHidden = false;
 
   private cardW = 690;
-  private readonly cardH = 300;
-  private thumbSize = 96;
+  /** Compact: title + 2-line story + pips + a full-width Play bar, no dead space.
+   *  Same layout for every stage (Nibs, Wildflower, …) — nothing hard-coded. */
+  private readonly cardH = 184;
+  private thumbSize = 72;
 
   private offFns: Array<() => void> = [];
 
@@ -248,22 +250,51 @@ export class UIScene extends Phaser.Scene {
     this.rebuildCard();
   }
 
+  /* ---- shared compact layout (rebuildCard + drawPips read the same numbers) ---- */
+  private get cardMetrics() {
+    const w = this.cardW;
+    const h = this.cardH;
+    const narrow = w < 420;
+    const thumbR = narrow ? 30 : 36;
+    const pad = 16;
+    const thumbX = -w / 2 + pad + thumbR;
+    const thumbY = -h / 2 + pad + thumbR;
+    const textX = thumbX + thumbR + 16;
+    const btnH = narrow ? 54 : 58;
+    return {
+      w,
+      h,
+      narrow,
+      thumbR,
+      thumbX,
+      thumbY,
+      textX,
+      wrap: w / 2 - pad - textX,
+      titleY: -h / 2 + 14,
+      storyY: -h / 2 + 14 + (narrow ? 26 : 30),
+      pipsY: h / 2 - btnH - 24,
+      btnY: h / 2 - 12 - btnH / 2,
+      btnH,
+    };
+  }
+
   /**
-   * (Re)draw the card at the current width. Thumbnail + text on top, a full-width
-   * Play bar along the bottom — the layout that survives a narrow phone.
+   * (Re)draw the card at the current width — compact: a small thumbnail, title +
+   * short story, a row of pips, and a full-width Play bar hugging the bottom edge.
+   * No dead vertical space; the puzzle/garden stays the visual focus.
    */
   private rebuildCard(): void {
     const prevTitle = this.cardTitle?.text ?? "";
     const prevStory = this.cardStory?.text ?? "";
     this.card.removeAll(true);
 
-    const w = this.cardW;
-    const h = this.cardH;
-    this.card.add(makePanel(this, w, h));
+    const m = this.cardMetrics;
+    this.card.add(makePanel(this, m.w, m.h));
 
-    // the WHOLE card is a tap target (thumbnail / text / empty space all start the puzzle)
+    // the whole card above the Play bar is a tap target
+    const zoneH = m.h - m.btnH - 26;
     const cardZone = this.add
-      .rectangle(0, -8, w, h - 78, 0xffffff, 0.001)
+      .rectangle(0, -m.h / 2 + zoneH / 2 + 6, m.w, zoneH, 0xffffff, 0.001)
       .setInteractive({ useHandCursor: true });
     cardZone.on("pointerover", () => this.registry.set("pointerOnUI", true));
     cardZone.on("pointerout", () => this.registry.set("pointerOnUI", false));
@@ -273,39 +304,45 @@ export class UIScene extends Phaser.Scene {
     });
     this.card.add(cardZone);
 
-    const thumbR = w < 420 ? 52 : 60;
-    this.thumbSize = thumbR * 1.62;
-    const thumbX = -w / 2 + thumbR + 22;
-    const thumbY = -h / 2 + thumbR + 22;
+    this.thumbSize = m.thumbR * 1.62;
     this.card.add(
-      makePanel(this, thumbR * 2, thumbR * 2, { radius: thumbR, highlight: false }).setPosition(thumbX, thumbY),
+      makePanel(this, m.thumbR * 2, m.thumbR * 2, { radius: m.thumbR, highlight: false }).setPosition(m.thumbX, m.thumbY),
     );
     this.cardThumb = this.add
-      .image(thumbX, thumbY + 2, "rabbit")
+      .image(m.thumbX, m.thumbY + 1, "rabbit")
       .setOrigin(0.5, 0.5)
       .setDisplaySize(this.thumbSize, this.thumbSize);
     this.cardThumbQ = this.add
-      .text(thumbX, thumbY, "?", { fontFamily: FONT_FAMILY, fontStyle: "700", fontSize: `${thumbR}px`, color: "#fef6e8" })
+      .text(m.thumbX, m.thumbY, "?", {
+        fontFamily: FONT_FAMILY,
+        fontStyle: "700",
+        fontSize: `${m.thumbR}px`,
+        color: "#fef6e8",
+      })
       .setOrigin(0.5);
     this.card.add([this.cardThumb, this.cardThumbQ]);
 
-    const textX = thumbX + thumbR + 18;
-    const wrap = w / 2 - 20 - textX;
     this.cardTitle = this.add
-      .text(textX, -h / 2 + 22, prevTitle, { ...titleStyle(w < 420 ? 22 : 25), wordWrap: { width: wrap } })
+      .text(m.textX, m.titleY, prevTitle, {
+        ...titleStyle(m.narrow ? 20 : 23),
+        wordWrap: { width: m.wrap },
+      })
       .setOrigin(0, 0);
     this.cardStory = this.add
-      .text(textX, -h / 2 + 60, prevStory, { ...bodyStyle(w < 420 ? 15 : 16), wordWrap: { width: wrap } })
+      .text(m.textX, m.storyY, prevStory, {
+        ...bodyStyle(m.narrow ? 13 : 15),
+        wordWrap: { width: m.wrap },
+        lineSpacing: -1,
+      })
       .setOrigin(0, 0);
 
     this.pips = this.add.graphics();
 
-    const playW = w - 44;
-    this.playBtn = new Button(this, 0, h / 2 - 44, {
-      width: playW,
-      height: 66,
+    this.playBtn = new Button(this, 0, m.btnY, {
+      width: m.w - 40,
+      height: m.btnH,
       label: "Play",
-      fontSize: 28,
+      fontSize: m.narrow ? 22 : 25,
       onClick: () => this.onPlay(),
     });
 
@@ -366,11 +403,11 @@ export class UIScene extends Phaser.Scene {
     const req = required ?? vm?.required ?? 0;
     const g = this.pips;
     g.clear();
-    const thumbR = this.cardW < 420 ? 52 : 60;
-    const x0 = -this.cardW / 2 + thumbR + 22 + thumbR + 18;
-    const y = this.cardH / 2 - 96;
-    const r = 10;
-    const gap = 30;
+    const m = this.cardMetrics;
+    const x0 = m.textX;
+    const y = m.pipsY;
+    const r = 8;
+    const gap = 24;
     for (let i = 0; i < req; i++) {
       const cx = x0 + r + i * gap;
       g.fillStyle(COLORS.shadow, 0.18);

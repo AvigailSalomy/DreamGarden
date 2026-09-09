@@ -14,9 +14,9 @@ interface LevelGoalsInit {
 }
 
 /**
- * Shown before every Catch & Collect round: which item(s), how many, and the
- * coin reward. Launched on top of a paused "Requests"; on Back it just closes
- * back to Requests (Requests was only paused, not stopped).
+ * Shown before every Carrot Dash round: the level number and the coin reward.
+ * Launched on top of a paused "Requests"; on Back it just closes back to
+ * Requests (Requests was only paused, not stopped).
  */
 export class LevelGoalsScene extends Phaser.Scene {
   private objectId!: string;
@@ -53,27 +53,47 @@ export class LevelGoalsScene extends Phaser.Scene {
     this.root.add(veil);
 
     const panelW = Math.min(W - 48, 420);
-    const panelH = Math.min(H - 140, 60 + levelDef.goals.length * 76 + 220);
+    const panelH = Math.min(H - 120, 408);
     this.root.add(makePanel(this, panelW, panelH).setPosition(cx, cy));
 
-    let y = cy - panelH / 2 + 46;
-    this.root.add(this.add.text(cx, y, `LEVEL ${levelDef.level}`, titleStyle(26)).setOrigin(0.5));
-    y += 40;
-    this.root.add(this.add.text(cx, y, "GOALS", labelStyle(18, "#7a6350")).setOrigin(0.5));
-    y += 44;
+    let y = cy - panelH / 2 + 42;
+    this.root.add(this.add.text(cx, y, `LEVEL ${levelDef.level}`, titleStyle(25)).setOrigin(0.5));
+    y += 34;
+    this.root.add(this.add.text(cx, y, "CARROT DASH", labelStyle(17, "#7a6350")).setOrigin(0.5));
+    y += 26;
+    this.root.add(
+      this.add
+        .text(cx, y, "Dash the path ~30s — grab, dodge, keep the combo alive!", {
+          ...bodyStyle(14),
+          align: "center",
+          wordWrap: { width: panelW - 56 },
+        })
+        .setOrigin(0.5),
+    );
+    y += 34;
 
-    for (const goal of levelDef.goals) {
-      const item = def.miniGamePool.find((i) => i.id === goal.itemId);
-      if (!item) continue;
-      const rowY = y;
-      this.root.add(this.add.image(cx - 56, rowY, item.icon).setDisplaySize(48, 48));
-      this.root.add(
-        this.add.text(cx - 20, rowY, `× ${goal.target}`, titleStyle(28)).setOrigin(0, 0.5),
-      );
-      y += 68;
-    }
+    // compact legend — the same six items the in-run strip shows
+    const legend: Array<[string, string, number | undefined]> = [
+      ["carrot", "Collect", undefined],
+      ["star_special", "Bonus", undefined],
+      ["carrot", "Golden", 0xffcf3f],
+      ["rock", "Hit", undefined],
+      ["water_drop", "Slide", undefined],
+      ["weeds", "Slow", 0x6fae5c],
+    ];
+    const cols = 3;
+    const colW = Math.min((panelW - 40) / cols, 118);
+    const legendX = cx - (colW * (cols - 1)) / 2;
+    legend.forEach(([tex, label, tint], i) => {
+      const gx = legendX + (i % cols) * colW;
+      const gy = y + Math.floor(i / cols) * 40;
+      const im = this.add.image(gx - 30, gy, tex).setDisplaySize(24, 24);
+      if (tint !== undefined) im.setTint(tint);
+      this.root.add(im);
+      this.root.add(this.add.text(gx - 15, gy, label, labelStyle(13, "#5b4636")).setOrigin(0, 0.5));
+    });
+    y += 40 + 30;
 
-    y += 8;
     this.root.add(this.add.image(cx - 44, y, "coin").setDisplaySize(28, 28));
     this.root.add(
       this.add.text(cx - 22, y, `Reward: +${levelDef.reward} Coins`, bodyStyle(17)).setOrigin(0, 0.5),
@@ -104,7 +124,7 @@ export class LevelGoalsScene extends Phaser.Scene {
     if (this.closing) return;
     this.closing = true;
     Sfx.tap();
-    this.scene.launch("CatchCollect", { objectId: this.objectId, level: levelDef });
+    this.scene.launch("CarrotDash", { objectId: this.objectId, level: levelDef });
     this.scene.stop();
   }
 

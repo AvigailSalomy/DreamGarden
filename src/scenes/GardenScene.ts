@@ -531,6 +531,8 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     const def = progression.def(objectId);
     const req = def?.requests.find((r) => r.id === requestId);
     if (!def || !req) return;
+    // consumed materials (see GardenObjectDef.requestPropsTransient) never appear in the world
+    if (def.requestPropsTransient) return;
 
     const x = def.garden_position.x + req.worldOffset.x;
     const y = def.garden_position.y + req.worldOffset.y;
@@ -699,11 +701,15 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
 
   private wireEvents(): void {
     this.offFns.push(
-      bus.on("puzzle:start", ({ objectId }) => {
-        if (this.reveal.isRunning || this.flowBusy) return;
+      bus.on("puzzle:start", ({ objectId, force }) => {
+        // never launch a puzzle over a running reveal; `force` (an explicit button)
+        // bypasses a stale entry-flow flag and clears it so the flow can't stay stuck.
+        if (this.reveal.isRunning) return;
+        if (this.flowBusy && !force) return;
+        this.flowBusy = false;
         this.camera.disable();
         this.scene.launch("Puzzle", { objectId });
-        this.scene.pause();
+        if (this.scene.isActive()) this.scene.pause();
       }),
     );
 

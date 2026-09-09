@@ -113,6 +113,13 @@ export interface GardenObjectDef {
 
   /** Purchasable requests that must ALL be bought before the puzzle unlocks. */
   requests: RequestDef[];
+  /**
+   * When true, a request's `worldSprite` represents a *consumed* material (soil,
+   * seeds, water) rather than a lasting decoration — so it is never left sitting
+   * in the garden. Default (false/undefined): props persist, like Nibs's cozy
+   * carrot basket / hay / clover.
+   */
+  requestPropsTransient?: boolean;
   /** Catch & Collect item pool used while this object is the active task. */
   miniGamePool: MiniGameItemDef[];
 }

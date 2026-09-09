@@ -102,6 +102,9 @@ export const WILDFLOWERS: GardenObjectDef = {
   reveal_animation: "bloom_wave",
   idle_behavior: "plant_sway",
   complete_sfx: "bloomChime",
+  // soil / seeds / watering supplies are consumed growing the bed — don't leave them
+  // scattered around (and poking out from under) the finished planter.
+  requestPropsTransient: true,
 
   letter: {
     body:

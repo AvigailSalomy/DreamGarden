@@ -19,15 +19,27 @@ export interface PuzzleBoardOpts {
   /** Screen Y the scattered piece tray must stay above (e.g. the Hint button top). */
   trayBottomY?: number;
   snapRadiusFactor: number;
-  /** Sfx method name to play during the finished-picture hold (rabbitChirp / birdSong / bloomChime). */
+  /** Sfx method name for the object sound (rabbitChirp / birdSong / bloomChime). */
   completeSfx?: string;
-  /** Called when the clean picture is on screen and the ~3 s hold begins. */
+  /** Called when the clean picture is on screen and the hold begins. */
   onAssembled?: () => void;
+  /**
+   * The puzzle that creates the object: after a short still hold, the finished
+   * picture "comes alive" in a style appropriate to what was restored, with the
+   * object sound at the moment it starts, then hands off. `undefined` = no living
+   * beat (intermediate puzzles): the picture is just held for {@link HOLD_MS}.
+   *  - "hop"   → animal: tiny ear/head twitch + one small in-place hop
+   *  - "bloom" → plant: individual flowers pop open one after another, then a soft sway
+   * (add e.g. "flit" for a bird with its own method — see playLivingMove dispatch.)
+   */
+  livingMove?: "hop" | "bloom";
   onSolved: () => void;
 }
 
-/** How long the completed picture is held before handing off to the garden reveal. */
+/** How long the completed picture is held before handing off (no living move). */
 const HOLD_MS = 3000;
+/** Still hold before the tiny "the picture came alive" move. */
+const SETTLE_MS = 900;
 
 /** Builds + runs one drag-and-snap picture puzzle with irregular jigsaw pieces. */
 export class PuzzleBoard {
@@ -42,6 +54,11 @@ export class PuzzleBoard {
   private hintG!: Phaser.GameObjects.Graphics;
   private edges: PieceEdges[] = [];
   private done = false;
+  private handedOff = false;
+  private holdTimer?: Phaser.Time.TimerEvent;
+  /** Cropped copies of the finished texture used by the "picture comes alive" beat
+   *  (all destroyed when the beat ends or the board is torn down). */
+  private livingOverlays: Phaser.GameObjects.Image[] = [];
 
   private frameScale = 1;
   private frameW = 0;
@@ -266,7 +283,7 @@ export class PuzzleBoard {
     });
   }
 
-  /* ---------------- completion: assemble → hold ~3 s → hand off ---------------- */
+  /* ---------------- completion: assemble → hold → (tiny move) → hand off ---------------- */
 
   private solve(): void {
     this.done = true;
@@ -307,28 +324,207 @@ export class PuzzleBoard {
     petalPuff(this.scene, centerX, centerY - 30, 14);
     this.scene.cameras.main.flash(200, 255, 253, 245);
 
-    // object-specific sound, once, a beat into the hold
-    if (this.o.completeSfx) {
-      const sfx = Sfx as unknown as Record<string, undefined | (() => void)>;
-      const fn = sfx[this.o.completeSfx];
-      if (typeof fn === "function") this.scene.time.delayedCall(260, () => fn.call(Sfx));
-    }
-
-    // calm breathing while the player takes it in
-    this.scene.tweens.add({
-      targets: finished,
-      scaleY: finished.scaleY * 1.02,
-      scaleX: finished.scaleX * 1.02,
-      duration: 1500,
-      yoyo: true,
-      repeat: 1,
-      ease: "Sine.easeInOut",
-    });
-
     // nothing covers the picture during the hold
     this.o.onAssembled?.();
 
-    this.scene.time.delayedCall(HOLD_MS, () => this.o.onSolved());
+    if (this.o.livingMove) {
+      // hold it perfectly still, then the object-appropriate "comes alive" beat.
+      // `finished` itself is never animated — see playLivingMove() and its variants.
+      this.holdTimer = this.scene.time.delayedCall(SETTLE_MS, () => this.playLivingMove());
+    } else {
+      // unchanged: object sound a beat in, calm breathing, standard hold
+      if (this.o.completeSfx) {
+        const fn = (Sfx as unknown as Record<string, undefined | (() => void)>)[this.o.completeSfx];
+        if (typeof fn === "function") this.scene.time.delayedCall(260, () => fn.call(Sfx));
+      }
+      this.scene.tweens.add({
+        targets: finished,
+        scaleY: finished.scaleY * 1.02,
+        scaleX: finished.scaleX * 1.02,
+        duration: 1500,
+        yoyo: true,
+        repeat: 1,
+        ease: "Sine.easeInOut",
+      });
+      this.holdTimer = this.scene.time.delayedCall(HOLD_MS, () => this.handOff());
+    }
+  }
+
+  /** Resolve an Sfx method by name and play it once (used by every living beat). */
+  private playObjectSfx(): void {
+    if (!this.o.completeSfx) return;
+    const fn = (Sfx as unknown as Record<string, undefined | (() => void)>)[this.o.completeSfx];
+    if (typeof fn === "function") fn.call(Sfx);
+  }
+
+  /** A pixel-aligned crop of the finished texture, laid exactly over `finished`. */
+  private livingCrop(cropX: number, cropY: number, cropW: number, cropH: number, depth = 41): Phaser.GameObjects.Image {
+    const { centerX, centerY, boardSize, texKey } = this.o;
+    const img = this.scene.add
+      .image(centerX, centerY, texKey)
+      .setDisplaySize(boardSize, boardSize)
+      .setDepth(depth);
+    img.setCrop(cropX, cropY, cropW, cropH);
+    this.livingOverlays.push(img);
+    return img;
+  }
+
+  private disposeLivingOverlays(): void {
+    for (const o of this.livingOverlays) o.destroy();
+    this.livingOverlays = [];
+  }
+
+  /**
+   * "The finished picture was still — then the thing inside it came alive."
+   * `finished` is NEVER touched (its composition / pose / baked shadow stay exact);
+   * every variant works on cropped copies of the SAME texture laid on top, so the
+   * artwork is identical (no seam, no duplicate) and the picture returns to the
+   * exact final frame. Dispatches by the restored object's style.
+   */
+  private playLivingMove(): void {
+    if (this.o.livingMove === "bloom") this.playLivingBloom();
+    else this.playLivingHop();
+  }
+
+  /**
+   * Animal: crop just the rabbit (head + body + ears, above the baked shadow/feet),
+   * a couple of quick ear/head twitches, a breath, then ONE small in-place hop that
+   * lifts it off its static shadow. Restores + destroys the overlay, then hands off.
+   */
+  private playLivingHop(): void {
+    const { centerX, centerY, texKey } = this.o;
+    const src = this.scene.textures.get(texKey).getSourceImage() as { width: number; height: number };
+    const TW = src.width || 640;
+    const TH = src.height || 640;
+
+    const cropW = TW * 0.62;
+    const rabbit = this.livingCrop(TW * 0.5 - cropW / 2, TH * 0.015, cropW, TH * 0.8);
+    const sx = rabbit.scaleX;
+    const sy = rabbit.scaleY;
+
+    this.playObjectSfx(); // once, as the movement starts
+
+    // 1) two quick ear/head twitches (tiny tilt about the picture centre)
+    this.scene.tweens.add({
+      targets: rabbit,
+      angle: 2.4,
+      duration: 85,
+      yoyo: true,
+      repeat: 2,
+      ease: "Sine.easeInOut",
+    });
+
+    // 2) a breath, then ONE small hop that lifts the rabbit off the static shadow
+    this.scene.tweens.add({
+      targets: rabbit,
+      scaleX: sx * 1.03,
+      scaleY: sy * 0.96,
+      delay: 110,
+      duration: 130,
+      ease: "Quad.easeOut",
+      yoyo: true,
+      onComplete: () => {
+        const p = { t: 0 };
+        this.scene.tweens.add({
+          targets: p,
+          t: 1,
+          duration: 340,
+          ease: "Sine.easeInOut",
+          onUpdate: () => {
+            const k = Math.sin(Math.PI * p.t); // 0 → 1 → 0
+            rabbit.y = centerY - k * 12; // small in-place hop, no travel
+            rabbit.setScale(sx * (1 - k * 0.03), sy * (1 + k * 0.05));
+          },
+          onComplete: () => {
+            rabbit.setPosition(centerX, centerY).setScale(sx, sy).setAngle(0);
+            this.disposeLivingOverlays();
+            this.handOff();
+          },
+        });
+      },
+    });
+  }
+
+  /**
+   * Plant: the individual flowers come alive. Three front blooms pop open one after
+   * another (each a small crop of that flower head, scaled about its own centre with
+   * a tiny unfurl-twist + sparkle), then the whole blooms band does one soft sway.
+   * Petal-height crops keep the planter, soil and baked shadow perfectly still.
+   */
+  private playLivingBloom(): void {
+    const { centerX, centerY, boardSize, texKey } = this.o;
+    const src = this.scene.textures.get(texKey).getSourceImage() as { width: number; height: number };
+    const TW = src.width || 640;
+    const TH = src.height || 640;
+
+    this.playObjectSfx(); // "bloomChime", once, as the first flower opens
+
+    // front-bloom head centres, as fractions of the wildflowers_portrait frame
+    const heads: Array<[number, number]> = [
+      [0.362, 0.297],
+      [0.5, 0.284],
+      [0.641, 0.3],
+    ];
+    const half = TW * 0.115; // crop half-size around a head (petals + margin)
+
+    heads.forEach(([fx, fy], i) => {
+      const cx = Phaser.Math.Clamp(fx * TW - half, 0, TW);
+      const cy = Phaser.Math.Clamp(fy * TH - half, 0, TH);
+      const flower = this.livingCrop(cx, cy, half * 2, half * 2, 42);
+      flower.setOrigin(fx, fy); // scale/twist about the flower's own centre
+      flower.setPosition(centerX - boardSize / 2 + fx * boardSize, centerY - boardSize / 2 + fy * boardSize);
+      const base = flower.scaleX; // = boardSize / TW
+
+      flower.setScale(base * 0.94);
+      this.scene.tweens.add({
+        targets: flower,
+        scale: base * 1.16,
+        angle: i % 2 ? 5 : -5,
+        delay: i * 150,
+        duration: 190,
+        ease: "Back.easeOut",
+        onComplete: () => {
+          sparkleBurst(this.scene, flower.x, flower.y - half * 0.4, 5, 22);
+          this.scene.tweens.add({
+            targets: flower,
+            scale: base,
+            angle: 0,
+            duration: 220,
+            ease: "Sine.easeInOut",
+          });
+        },
+      });
+    });
+
+    // once the last flower has opened: one soft sway of the whole blooms band.
+    // depth 43 → the band covers the (now settled) individual flower crops so the
+    // heads + stems sway together; the planter / soil / shadow below stay still.
+    this.scene.time.delayedCall(300 + 190 + 220 + 90, () => {
+      const band = this.livingCrop(0, 0, TW, TH * 0.4, 43); // heads + upper stems, above the rim
+      sparkleBurst(this.scene, centerX, centerY - boardSize * 0.18, 4, boardSize * 0.14);
+      const p = { t: 0 };
+      this.scene.tweens.add({
+        targets: p,
+        t: 1,
+        duration: 520,
+        ease: "Sine.easeInOut",
+        onUpdate: () => {
+          band.setAngle(Math.sin(p.t * Math.PI * 2) * 2); // 0 → 2 → 0 → -2 → 0
+        },
+        onComplete: () => {
+          band.setAngle(0);
+          this.disposeLivingOverlays();
+          this.handOff();
+        },
+      });
+    });
+  }
+
+  /** Commit to the garden hand-off exactly once, however we got here. */
+  private handOff(): void {
+    if (this.handedOff) return;
+    this.handedOff = true;
+    this.o.onSolved();
   }
 
   /* ---------------- dev/test helpers ---------------- */
@@ -388,6 +584,9 @@ export class PuzzleBoard {
   }
 
   destroy(): void {
+    this.holdTimer?.remove(false);
+    this.holdTimer = undefined;
+    this.disposeLivingOverlays();
     this.tiles.forEach((t) => t.destroy());
   }
 }

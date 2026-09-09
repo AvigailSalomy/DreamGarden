@@ -282,7 +282,8 @@ export class RequestsScene extends Phaser.Scene {
   private completePuzzle(): void {
     if (this.closing) return;
     this.closing = true;
-    bus.emit("puzzle:start", { objectId: this.objectId });
+    // explicit action from a modal — always launch, even if an entry-flow flag is stale
+    bus.emit("puzzle:start", { objectId: this.objectId, force: true });
     this.tweens.add({
       targets: this.root,
       alpha: 0,

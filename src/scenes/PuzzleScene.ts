@@ -5,10 +5,17 @@ import { PuzzleBoard } from "../puzzle/PuzzleBoard";
 import { safeInsets } from "../util/safeArea";
 import { bus, progression } from "../game/services";
 import { Sfx } from "../fx/Sfx";
+import type { GardenObjectDef } from "../data/types";
 import type { UIScene } from "./UIScene";
 
 interface PuzzleInit {
   objectId: string;
+}
+
+/** Which "picture comes alive" style fits what is being restored. Add cases as
+ *  new categories arrive (e.g. a bird → "flit"). */
+function livingStyleFor(def: GardenObjectDef): "hop" | "bloom" {
+  return def.category === "plant" ? "bloom" : "hop";
 }
 
 export class PuzzleScene extends Phaser.Scene {
@@ -96,6 +103,8 @@ export class PuzzleScene extends Phaser.Scene {
       trayBottomY: hintTopY - 18,
       snapRadiusFactor: def.puzzle.snapRadiusFactor ?? 0.62,
       completeSfx: def.complete_sfx,
+      // only the puzzle that actually creates the object gets the "picture comes alive" beat
+      livingMove: vm.completed + 1 >= vm.required ? livingStyleFor(def) : undefined,
       onAssembled: () => this.hideChrome(),
       onSolved: () => this.onSolved(def.id, vm.completed, vm.required),
     });
@@ -150,8 +159,8 @@ export class PuzzleScene extends Phaser.Scene {
 
   /**
    * The board has already: assembled the clean picture, played the object sound,
-   * and held it for ~3 s. This just commits progression and hands off to the
-   * garden reveal — a short fade, nothing that covers the picture during the hold.
+   * and held it. This just commits progression and hands off to the garden
+   * reveal — a short fade, nothing that covers the picture during the hold.
    */
   private hideChrome(): void {
     this.chrome.forEach((o) =>
