@@ -424,7 +424,7 @@ export class FrostedValleyScene extends Phaser.Scene {
 
   private buildGround(): void {
     const g = this.add.graphics().setDepth(-200);
-    g.fillGradientStyle(0xe7eff8, 0xe7eff8, 0xf6fafd, 0xf6fafd, 1);
+    g.fillGradientStyle(0xeef4fa, 0xeef4fa, 0xfafcff, 0xfafcff, 1);
     g.fillRect(0, HORIZON - 4, WORLD_W, WORLD_H - HORIZON + 4);
 
     const blend = this.add.graphics().setDepth(-185);
@@ -439,13 +439,14 @@ export class FrostedValleyScene extends Phaser.Scene {
       seed = (seed * 16807) % 2147483647;
       return seed / 2147483647;
     };
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0; i < 70; i++) {
       const x = rand() * WORLD_W;
       const y = HORIZON + 60 + rand() * (WORLD_H - HORIZON - 60);
-      const w = 260 + rand() * 420;
-      const h = w * (0.28 + rand() * 0.12);
-      const tone = rand() > 0.55 ? 0xd9e8f4 : 0xf3f8fc;
-      drifts.fillStyle(tone, 0.5);
+      const w = 220 + rand() * 460;
+      const h = w * (0.26 + rand() * 0.14);
+      const roll = rand();
+      const tone = roll > 0.72 ? 0xc9dcee : roll > 0.4 ? 0xd9e8f4 : 0xf6fbff;
+      drifts.fillStyle(tone, roll > 0.72 ? 0.35 : 0.5);
       drifts.fillEllipse(x, y, w, h);
     }
   }
@@ -478,6 +479,11 @@ export class FrostedValleyScene extends Phaser.Scene {
 
   /** Waterfall -> pool -> bridge crossing -> continued water, offset from the grove clearing. */
   private buildRiver(): void {
+    const bank = this.add.graphics().setDepth(-142);
+    bank.fillStyle(0xf6fbff, 0.95);
+    const bankOuter = this.add.graphics().setDepth(-143);
+    bankOuter.fillStyle(0xdcebf7, 0.6);
+
     const river = this.add.graphics().setDepth(-140);
     river.fillStyle(0x8fd0e8, 0.85);
     const src = { x: ZONES.waterfall.x - 60, y: ZONES.waterfall.y + 160 };
@@ -497,7 +503,11 @@ export class FrostedValleyScene extends Phaser.Scene {
       const wobble = Math.sin(i * 0.55) * 70;
       return { x: p.x + (-dy / len) * wobble, y: p.y + (dx / len) * wobble };
     });
-    for (const p of pts) river.fillEllipse(p.x, p.y, 230, 140);
+    for (const p of pts) {
+      bankOuter.fillEllipse(p.x, p.y, 330, 205);
+      bank.fillEllipse(p.x, p.y, 280, 172);
+      river.fillEllipse(p.x, p.y, 230, 140);
+    }
 
     const shimmer = this.add.graphics().setDepth(-138);
     shimmer.fillStyle(0xcdeef7, 0.5);
