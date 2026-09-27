@@ -136,6 +136,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private onResize(): void {
     this.layoutScreen();
     this.camera?.onResize();
+    this.positionForegroundFraming();
   }
 
   private layoutScreen(): void {
@@ -288,6 +289,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private async runPostStage(revealed: GardenObjectDef): Promise<void> {
     await wait(this, 500);
     if (revealed.overview_text) this.toast(revealed.overview_text);
+    this.refreshPond(true);
     await wait(this, 1100);
 
     const next = progression.currentTask;
@@ -390,8 +392,39 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     return this.add.image(x, y, key).setOrigin(0.5, 1).setScale(scale).setDepth(y);
   }
 
-  private sign(x: number, y: number): void {
-    this.prop("signpost", x, y, 0.95, 90);
+  /**
+   * Same contract as `prop()`, for the production PNGs (`dg_` prefix): these were
+   * normalized to a max side of ~1100px by the asset pipeline, not hand-sized like
+   * the old flat SVGs, so callers pass an absolute scale tuned per asset rather
+   * than reusing the SVGs' native-size-relative scale numbers.
+   */
+  private dprop(key: string, x: number, y: number, scale: number, shadowW = 0): Phaser.GameObjects.Image {
+    return this.prop(`dg_${key.split("/").pop()}`, x, y, scale, shadowW);
+  }
+
+  /** A small, purely decorative, non-interactive creature — atmosphere only, no
+   *  progression/economy tie. A gentle idle bob is its only behaviour. */
+  private critter(key: string, x: number, y: number, scale: number, flip = false): void {
+    const img = this.add
+      .image(x, y, `dg_${key.split("/").pop()}`)
+      .setOrigin(0.5, 1)
+      .setScale(scale)
+      .setFlipX(flip)
+      .setDepth(y);
+    this.add
+      .image(x, y + 3, "shadow")
+      .setDisplaySize(scale * 340, scale * 110)
+      .setAlpha(0.3)
+      .setDepth(y - 1);
+    this.tweens.add({
+      targets: img,
+      y: y - 6,
+      duration: 1600 + Phaser.Math.Between(-200, 400),
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+      delay: Phaser.Math.Between(0, 800),
+    });
   }
 
   private tree(
@@ -408,14 +441,38 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     if (o.scroll !== undefined) img.setScrollFactor(o.scroll);
   }
 
+  /**
+   * Production-art tree kinds, each carrying its own base scale so the world's
+   * hand-tuned x/y layout (and per-instance size *factor* below) survives the
+   * swap from the old flat SVGs to the much larger production PNGs untouched.
+   */
+  private static readonly TREE_KIND: Record<string, { tex: string; base: number }> = {
+    tree: { tex: "dg_tree_medium_01", base: 0.36 },
+    tree_tall: { tex: "dg_tree_tall_01", base: 0.42 },
+    tree_pine: { tex: "dg_tree_large_01", base: 0.38 },
+    tree_pink: { tex: "dg_tree_pink_01", base: 0.4 },
+    tree_far: { tex: "dg_tree_small_01", base: 0.3 },
+  };
+
+  private treeOfKind(
+    kind: string,
+    x: number,
+    y: number,
+    factor: number,
+    o: { depth?: number; tint?: number; alpha?: number; scroll?: number } = {},
+  ): void {
+    const k = GardenScene.TREE_KIND[kind];
+    this.tree(k.tex, x, y, k.base * factor, o);
+  }
+
   /** A cozy woodland framing the clearing — layered for depth, never over gameplay. */
   private buildTrees(): void {
-    const kinds = ["tree", "tree_tall", "tree_pine"];
+    const farKinds = ["tree_far", "tree", "tree_pink"];
 
     // 1. hazy far tree line across the back of the whole garden
     for (let i = 0; i < 10; i++) {
       const x = 120 + i * 330 + (i % 2) * 60;
-      this.tree(kinds[i % 3], x, 740 + (i % 3) * 24, 0.7 + (i % 2) * 0.12, {
+      this.treeOfKind(farKinds[i % 3], x, 740 + (i % 3) * 24, 0.7 + (i % 2) * 0.12, {
         depth: -150,
         tint: 0xb7c6d2,
         alpha: 0.95,
@@ -430,7 +487,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       ["tree", 1820, 1050, 0.9],
       ["tree_pine", 2010, 1120, 0.9],
       // flower-bed left frame (clear of the wildflower planter at x470)
-      ["tree", 110, 1560, 0.9],
+      ["tree_pink", 110, 1560, 0.95],
       ["tree_tall", 40, 1740, 0.95],
       // tree grove around the dead oak
       ["tree", 2700, 1540, 1.0],
@@ -440,13 +497,22 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       ["tree", 1160, 1900, 0.95],
       ["tree_tall", 1940, 1880, 0.9],
       // far side of the meadow
-      ["tree", 560, 1340, 0.85],
+      ["tree_pink", 560, 1340, 0.9],
     ];
-    for (const [k, x, y, s] of mid) this.tree(k, x, y, s);
+    for (const [k, x, y, s] of mid) this.treeOfKind(k, x, y, s);
+
+    // an always-lush hero tree — no damaged counterpart was supplied for this one,
+    // so it isn't gated behind any restoration (that would be inventing a mechanic);
+    // it's simply a magical highlight standing in the already-alive meadow.
+    this.add
+      .image(700, 1300, "dg_magic_tree_restored")
+      .setOrigin(0.5, 1)
+      .setScale(0.5)
+      .setDepth(1300);
 
     // 3. dark foreground framing at the world edges (only seen when panned there)
-    this.tree("tree_fg", -70, 1420, 1.35, { depth: 7200, scroll: 1 });
-    this.tree("tree_fg", 3270, 1470, 1.35, { depth: 7200, scroll: 1 });
+    this.treeOfKind("tree_pine", -70, 1420, 2.4, { depth: 7200, scroll: 1 });
+    this.treeOfKind("tree_pine", 3270, 1470, 2.4, { depth: 7200, scroll: 1 });
   }
 
   private buildProps(): void {
@@ -456,45 +522,119 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.prop("heart_dormant", 1560, 980, 1.15, 150);
 
     // ---- archway + cottage-yard fence (the songbird perch) ----
-    this.prop("arch", 1560, 1170, 1.25);
-    for (let i = 0; i < 6; i++) this.prop("fence", 1150 + i * 300, 1290 + (i % 2) * 6, 1.0);
-    for (let i = 0; i < 3; i++) this.prop("fence", 2560 + i * 20, 1180 - i * 150, 0.8);
+    // flower_arch_01 replaces the old bare wooden arch — same spot/role, dressed.
+    this.dprop("vegetation/flower_arch_01", 1560, 1170, 0.62);
+    for (let i = 0; i < 6; i++) this.dprop("decor/fence_01", 1150 + i * 300, 1290 + (i % 2) * 6, 0.34);
+    for (let i = 0; i < 3; i++) this.dprop("decor/fence_01", 2560 + i * 20, 1180 - i * 150, 0.28);
+    // a cosy cottage tucked behind the fence line — new, purely decorative depth
+    this.dprop("structures/cottage_small_01", 1980, 1230, 0.42, 260);
+    this.dprop("decor/lantern_01", 1700, 1250, 0.22);
+    this.dprop("decor/bench_01", 1420, 1260, 0.2, 140);
+    this.dprop("decor/birdhouse_01", 1260, 1180, 0.18);
+    this.critter("animals/squirrel", 2020, 1300, 0.15);
 
     // ---- animal meadow (rabbit) ----
     this.prop("dead_shrub", 640, 1440, 1.0, 150);
-    this.prop("weeds", 820, 1560, 1.1);
-    this.prop("weeds", 1000, 1440, 0.9);
-    this.prop("weeds", 1120, 1560, 0.85);
-    this.prop("rock", 560, 1620, 1.0, 150);
+    this.dprop("vegetation/bush_green_01", 820, 1560, 0.2);
+    this.dprop("vegetation/fern_01", 1000, 1440, 0.17);
+    this.dprop("vegetation/flowers_yellow_01", 1120, 1560, 0.19);
+    this.dprop("nature/rock_medium_01", 560, 1620, 0.2, 150);
+    this.dprop("nature/mushrooms_01", 1050, 1660, 0.13);
+    this.critter("animals/hedgehog", 700, 1610, 0.13);
 
     // ---- flower bed (Wildflowers) ----
     // The Wildflowers object sprite (wildflower_bed) at (470,1652) IS the planter —
-    // flowers grow from its own soil. No extra planter props here, so the bed never
-    // looks duplicated or like loose flowers sitting outside a pot.
-    this.prop("weeds", 300, 1520, 0.8);
-    this.prop("rock", 690, 1660, 0.8, 120);
-    this.sign(120, 1600);
+    // flowers grow from its own soil, so it stays untouched; this only dresses the
+    // ground AROUND it. Restored/unrestored flower art frames the same spot the
+    // planter already occupies, so its own bloom animation still reads as the hero
+    // moment rather than being upstaged by a duplicate bed.
+    const wildflowersDone = progression.isUnlocked("wildflowers");
+    this.dprop(wildflowersDone ? "vegetation/vegetation_01" : "vegetation/vegetation_04", 260, 1560, 0.22);
+    this.dprop("vegetation/flowers_pink_01", 300, 1520, 0.18);
+    this.dprop("nature/rock_small_01", 690, 1660, 0.16, 120);
+    this.dprop("decor/sign_01", 120, 1600, 0.16);
 
     // ---- tree grove (future: the dead Great Oak) ----
     this.prop("oak_dead", 2500, 1460, 1.2, 220);
-    this.prop("stump", 2140, 1420, 1.15, 160);
+    this.dprop("nature/log_01", 2140, 1420, 0.22, 160);
     this.prop("sapling", 2320, 1440, 1.0, 90);
     this.prop("sapling", 2260, 1600, 0.9, 80);
-    this.prop("rock", 2660, 1620, 1.1, 170);
-    this.sign(2060, 1520);
+    this.dprop("nature/rock_large_01", 2660, 1620, 0.24, 170);
+    this.dprop("vegetation/hedge_straight_01", 2440, 1660, 0.26);
+    this.dprop("decor/sign_01", 2060, 1520, 0.16);
+    this.critter("animals/fox", 2760, 1500, 0.16, true);
+    this.critter("animals/deer", 2380, 1560, 0.18);
 
     // ---- farm corner (future) ----
     this.prop("crate", 2560, 980, 1.0, 180);
     this.prop("crate", 2740, 1040, 0.9, 160);
-    this.prop("weeds", 2660, 1080, 0.85);
-    this.sign(2860, 1020);
+    this.dprop("structures/animal_house_01", 2860, 1000, 0.24, 140);
+    this.dprop("decor/planter_01", 2620, 1100, 0.17);
+    this.dprop("decor/sign_01", 2860, 1020, 0.16);
 
     // ---- pondside (future) ----
-    this.prop("pond_dry", 1540, 1980, 1.4);
-    this.prop("rock", 1240, 1980, 1.1, 180);
-    this.prop("rock", 1860, 1960, 0.9, 150);
-    this.prop("weeds", 1420, 2040, 0.8);
-    this.sign(1120, 1900);
+    this.buildPond();
+    this.dprop("nature/rock_large_01", 1240, 1980, 0.22, 180);
+    this.dprop("nature/rock_medium_01", 1860, 1960, 0.2, 150);
+    this.dprop("vegetation/bush_mixed_01", 1420, 2040, 0.2);
+    this.dprop("structures/bridge_wood_01", 1750, 2060, 0.34);
+    this.dprop("decor/picnic_table_01", 1240, 2120, 0.2, 160);
+    this.dprop("decor/sign_01", 1120, 1900, 0.16);
+  }
+
+  /**
+   * The pondside's only genuine damaged↔restored PRODUCTION ASSET PAIR (see the
+   * asset-pack inventory — every other region reuses the existing flat-tint
+   * RegionOverlay veil, since no other real damaged/restored pair was supplied).
+   * Pondside itself isn't a wired restoration target yet (no catalog entry — see
+   * the report), so rather than fabricate a new progression mechanic for it, its
+   * reveal rides the honest signal already tracked: the whole visible garden
+   * being fully restored. `refreshPond()` re-checks this live on every unlock.
+   */
+  private pondDamaged?: Phaser.GameObjects.Image;
+  private pondRestored?: Phaser.GameObjects.Image;
+  private pondLilies?: Phaser.GameObjects.Image;
+
+  private buildPond(): void {
+    const x = 1540;
+    const y = 1980;
+    this.pondDamaged = this.dprop("water/pond_damaged_01", x, y, 0.5);
+    this.pondRestored = this.add
+      .image(x, y, "dg_pond_restored_01")
+      .setOrigin(0.5, 1)
+      .setScale(0.5)
+      .setDepth(y + 0.1)
+      .setAlpha(0);
+    this.pondLilies = this.add
+      .image(x - 40, y - 20, "dg_water_lilies_01")
+      .setOrigin(0.5, 1)
+      .setScale(0.16)
+      .setDepth(y + 0.2)
+      .setAlpha(0);
+    this.add
+      .image(x + 260, y - 340, "dg_waterfall_01")
+      .setOrigin(0.5, 1)
+      .setScale(0.42)
+      .setDepth(y - 340);
+    this.refreshPond(false);
+  }
+
+  /** Swap the pond to its restored state once every current restoration is done. */
+  private refreshPond(animate: boolean): void {
+    if (!this.pondDamaged || !this.pondRestored || !this.pondLilies) return;
+    const allDone = progression.unlockedObjects().length >= CATALOG.length;
+    const dAlpha = allDone ? 0 : 1;
+    const rAlpha = allDone ? 1 : 0;
+    if (!animate) {
+      this.pondDamaged.setAlpha(dAlpha);
+      this.pondRestored.setAlpha(rAlpha);
+      this.pondLilies.setAlpha(rAlpha);
+      return;
+    }
+    if (this.pondRestored.alpha === rAlpha) return; // no change
+    this.tweens.add({ targets: this.pondDamaged, alpha: dAlpha, duration: 900, ease: "Sine.easeOut" });
+    this.tweens.add({ targets: [this.pondRestored, this.pondLilies], alpha: rAlpha, duration: 900, ease: "Sine.easeOut" });
+    if (allDone) sparkleBurst(this, this.pondRestored.x, this.pondRestored.y - 80, 20, 80);
   }
 
   private buildRegions(): void {
@@ -524,9 +664,40 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     );
   }
 
+  private fgLeft?: Phaser.GameObjects.Image;
+  private fgRight?: Phaser.GameObjects.Image;
+
   private buildForeground(): void {
     const v = this.add.image(0, 0, "vignette").setOrigin(0, 0).setScrollFactor(0).setDepth(8000);
     this.screenObjects.push(v);
+
+    // Screen-space corner framing (locked light-weight production art, not the
+    // interactive world) — sells "the camera is physically inside the garden"
+    // without ever covering the HUD (top) or the task card (bottom-centre): kept
+    // to the bottom corners only, small, and clear of the card's centred width.
+    this.fgLeft = this.add
+      .image(-10, 0, "dg_foreground_02")
+      .setOrigin(0, 1)
+      .setScale(0.22)
+      .setAlpha(0.92)
+      .setScrollFactor(0)
+      .setDepth(7999);
+    this.fgRight = this.add
+      .image(0, 0, "dg_foreground_03")
+      .setOrigin(1, 1)
+      .setScale(0.2)
+      .setFlipX(true)
+      .setAlpha(0.92)
+      .setScrollFactor(0)
+      .setDepth(7999);
+    this.positionForegroundFraming();
+  }
+
+  private positionForegroundFraming(): void {
+    const h = this.scale.height;
+    const w = this.scale.width;
+    this.fgLeft?.setPosition(-10, h + 10);
+    this.fgRight?.setPosition(w + 10, h + 10);
   }
 
   /* ---------------- objects ---------------- */

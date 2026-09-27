@@ -56,3 +56,8 @@ Thumbs.db
 *.local
 *.tmp
 tmp/
+
+# Raw production-art source pack (2500px raw generations, ~65MB) — not shipped.
+# scripts/process_dg_assets.py turns it into the actual shipped, trimmed,
+# background-removed sprites under public/assets/dg/, which ARE committed.
+/Game_Assets_Dream_Garden/

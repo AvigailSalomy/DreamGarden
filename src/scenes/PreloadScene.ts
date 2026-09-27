@@ -85,6 +85,72 @@ export class PreloadScene extends Phaser.Scene {
     svg("water_dish_prop", 150, 90);
     svg("cozy_perch_prop", 170, 130);
 
+    // ---- production art pass (Dream Garden visual rebuild) ----
+    // Raster PNGs (background-removed from the supplied Game_Assets_Dream_Garden
+    // pack via scripts/process_dg_assets.py) — a different loader from the rest of
+    // this file's hand-drawn SVGs. Prefixed "dg_" throughout so a texture key never
+    // collides with the flat placeholder it's replacing (e.g. "rabbit" vs "dg_rabbit"),
+    // which keeps the swap a one-line change in data/objects.ts and lets the puzzle
+    // portraits (rabbit_portrait etc. — unrelated, untouched here) keep working.
+    // registers under a FLAT key (folder stripped: "nature/rock_medium_01" -> "dg_rock_medium_01")
+    // — GardenScene's `dprop()` helper derives the same flat key from the same path.
+    const dg = (path: string) => this.load.image(`dg_${path.split("/").pop()}`, `assets/dg/${path}.png`);
+
+    dg("animals/rabbit");
+    dg("animals/bluebird");
+    dg("animals/squirrel");
+    dg("animals/fox");
+    dg("animals/deer");
+    dg("animals/hedgehog");
+
+    dg("trees/tree_small_01");
+    dg("trees/tree_medium_01");
+    dg("trees/tree_large_01");
+    dg("trees/tree_tall_01");
+    dg("trees/tree_pink_01");
+    dg("trees/magic_tree_restored");
+
+    dg("vegetation/bush_green_01");
+    dg("vegetation/bush_mixed_01");
+    dg("vegetation/fern_01");
+    dg("vegetation/hedge_straight_01");
+    dg("vegetation/flowers_blue_01");
+    dg("vegetation/flowers_mixed_01");
+    dg("vegetation/flowers_pink_01");
+    dg("vegetation/flowers_yellow_01");
+    dg("vegetation/flower_arch_01");
+    dg("vegetation/vegetation_01");
+    dg("vegetation/vegetation_04");
+
+    dg("nature/rock_large_01");
+    dg("nature/rock_medium_01");
+    dg("nature/rock_small_01");
+    dg("nature/log_01");
+    dg("nature/mushrooms_01");
+
+    dg("decor/fence_01");
+    dg("decor/lantern_01");
+    dg("decor/sign_01");
+    dg("decor/bench_01");
+    dg("decor/birdhouse_01");
+    dg("decor/planter_01");
+    dg("decor/flower_cart_01");
+    dg("decor/picnic_table_01");
+
+    dg("structures/cottage_small_01");
+    dg("structures/animal_house_01");
+    dg("structures/bridge_wood_01");
+
+    dg("water/pond_damaged_01");
+    dg("water/pond_restored_01");
+    dg("water/water_lilies_01");
+    dg("water/waterfall_01");
+
+    dg("foreground/foreground_02");
+    dg("foreground/foreground_03");
+
+    dg("terrain/terrain_04");
+
     // fx + ui
     svg("spark", 48, 48);
     svg("glow", 256, 256);

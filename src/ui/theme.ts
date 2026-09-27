@@ -10,7 +10,9 @@ export const COLORS = {
   skyLow: 0xffe0cc,
   hillFar: 0xaab7e2,
   hillNear: 0xa9cf9a,
-  grassDull: 0xaeb885,
+  // richer, less olive-drab than before — matches the new production art's greens
+  // (was 0xaeb885); keeps the same "everyday base ground" role.
+  grassDull: 0x9cbf7a,
   grassLush: 0x8fc77a,
   dirt: 0xcda887,
   wood: 0xc99a6b,

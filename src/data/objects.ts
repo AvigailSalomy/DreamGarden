@@ -13,9 +13,11 @@ export const RABBIT: GardenObjectDef = {
   category: "animal",
   tier: "common",
 
-  garden_sprite: "rabbit",
+  garden_sprite: "dg_rabbit",
   garden_position: { x: 900, y: 1500 },
-  garden_scale: 0.92,
+  // production PNG is native ~671x1100 (vs. the old 220x250 flat SVG) — scale
+  // down to roughly the same on-screen footprint the garden layout was tuned for.
+  garden_scale: 0.34,
   region: "animalMeadow",
   layer: "actors",
 
@@ -161,9 +163,11 @@ export const BIRD: GardenObjectDef = {
   category: "animal",
   tier: "common",
 
-  garden_sprite: "bird",
+  garden_sprite: "dg_bluebird",
   garden_position: { x: 1750, y: 1182 }, // perched on the cottage-yard fence rail
-  garden_scale: 1.0,
+  // production PNG is native ~1049x1057 (vs. the old 150x160 flat SVG) — scale
+  // down to roughly the same on-screen footprint the garden layout was tuned for.
+  garden_scale: 0.16,
   region: "cottageYard",
   layer: "actors",
 
