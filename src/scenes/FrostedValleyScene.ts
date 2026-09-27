@@ -3,50 +3,76 @@ import { CameraController } from "../world/CameraController";
 import { sparkleBurst, gatherGlow, petalPuff } from "../fx/Particles";
 import { Sfx } from "../fx/Sfx";
 import { makeIconButton } from "../ui/hit";
+import { makePanel } from "../ui/Panel";
+import { titleStyle, bodyStyle } from "../ui/theme";
 import { safeInsets } from "../util/safeArea";
+import { progression } from "../game/services";
 
 /**
- * The first Frosted Valley hero area (Snowy Village + Frozen Waterfall), built
- * from the supplied production art in public/assets/frosted/. Fully isolated:
- * its own preload(), its own world, no dependency on the main Garden catalog/
- * progression/economy/save systems. The fountain restoration below is a
- * self-contained stand-in for what will eventually be triggered by solving a
- * real puzzle (see the comment on `triggerFountainRestore`) — that wiring is
- * intentionally left for a later integration pass, not built here.
+ * Frosted Valley — a second, larger world built from the supplied production
+ * art in public/assets/frosted/. Fully isolated: its own preload(), its own
+ * world, no dependency on the main Garden catalog/economy/save systems.
+ * Read-only dependency on `progression.isGardenComplete()` (already exists,
+ * unmodified) gates entry behind the main Dream Garden's completion.
+ *
+ * SCALE SYSTEM: every prop's world size is driven by a target world-unit
+ * HEIGHT (see NATIVE_H/target heights below), not by native PNG dimensions —
+ * a rabbit is ~220 units tall (matching the main Garden's own rabbit scale),
+ * and everything else is sized relative to that, per the hierarchy
+ * animal < decor < small tree < cottage < large tree < major feature.
+ *
+ * COMPOSITION: five zones spaced ~1600-2000 world-units apart along a single
+ * path (see ZONES/PATH/RIVER), each with its own generous clearing — not one
+ * overlapping pile. The fountain restoration is a tap-triggered stand-in for
+ * the eventual puzzle hookup (see `triggerFountainRestore`).
  */
 
-const FV_KEYS = [
-  "fv_bridge",
-  "fv_cottage_a",
-  "fv_cottage_b",
-  "fv_pine",
-  "fv_magic_treehouse",
-  "fv_fence",
-  "fv_barrel_flowers",
-  "fv_birdhouse_post",
-  "fv_ice_block",
-  "fv_icicles",
-  "fv_waterfall",
-  "fv_riverbank",
-  "fv_crystal_a",
-  "fv_crystal_b",
-  "fv_flower_bush",
-  "fv_rabbit",
-  "fv_fox",
-  "fv_squirrel",
-  "fv_sparkle_trail",
-  "fv_berry_branch",
-  "fv_fountain_damaged",
-  "fv_fountain_restored",
-  "fv_dead_tree",
-];
+// native pixel dimensions of each processed asset (see public/assets/frosted/)
+const NATIVE_H: Record<string, number> = {
+  fv_bridge: 545,
+  fv_cottage_a: 719,
+  fv_cottage_b: 582,
+  fv_pine: 927,
+  fv_magic_treehouse: 822,
+  fv_fence: 542,
+  fv_barrel_flowers: 731,
+  fv_birdhouse_post: 785,
+  fv_ice_block: 647,
+  fv_icicles: 536,
+  fv_waterfall: 569,
+  fv_riverbank: 656,
+  fv_crystal_a: 578,
+  fv_crystal_b: 866,
+  fv_flower_bush: 543,
+  fv_rabbit: 529,
+  fv_fox: 509,
+  fv_squirrel: 555,
+  fv_berry_branch: 873,
+  fv_fountain_damaged: 615,
+  fv_fountain_restored: 821,
+  fv_dead_tree: 652,
+};
 
-const WORLD_W = 2400;
-const WORLD_H = 1800;
-const HORIZON = 360;
-const FOUNTAIN = { x: 1300, y: 940 };
-const OVERVIEW_CENTER = { x: 1300, y: 950 };
-const START_FOCUS = { x: 1300, y: 900 };
+const FV_KEYS = [...Object.keys(NATIVE_H), "fv_sparkle_trail"];
+
+const WORLD_W = 6000;
+const WORLD_H = 4800;
+const HORIZON = 350;
+
+/** Five distinct clearings, spaced ~1600-2000 world-units apart — the world's real structure. */
+const ZONES = {
+  village: { x: 900, y: 4300 },
+  bridge: { x: 2150, y: 3500 },
+  grove: { x: 2950, y: 2600 },
+  waterfall: { x: 4150, y: 1500 },
+  crystals: { x: 4950, y: 850 },
+};
+
+const START_FOCUS = { x: ZONES.village.x, y: ZONES.village.y - 90 };
+/** Settle zoom after the opening reveal: wide enough to read a whole clearing
+ * (a cottage plus its neighbors), not so tight it crops against one building. */
+const SETTLE_ZOOM = 0.58;
+const OVERVIEW_CENTER = { x: (ZONES.village.x + ZONES.crystals.x) / 2, y: (ZONES.village.y + ZONES.crystals.y) / 2 };
 
 const wait = (scene: Phaser.Scene, ms: number) => new Promise<void>((res) => scene.time.delayedCall(ms, res));
 
@@ -60,6 +86,7 @@ export class FrostedValleyScene extends Phaser.Scene {
   private skipBtn?: Phaser.GameObjects.Container;
   private tourSkipped = false;
   private idleTargets: Phaser.GameObjects.Image[] = [];
+  private locked = false;
 
   constructor() {
     super("FrostedValley");
@@ -70,6 +97,12 @@ export class FrostedValleyScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.locked = !progression.isGardenComplete();
+    if (this.locked) {
+      this.buildLockedPreview();
+      return;
+    }
+
     this.restored = false;
     this.restoring = false;
     this.flowBusy = false;
@@ -78,10 +111,14 @@ export class FrostedValleyScene extends Phaser.Scene {
 
     this.buildSky();
     this.buildGround();
+    this.buildPath();
+    this.buildRiver();
     this.buildForestFringe();
-    this.buildVillageCluster();
-    this.buildWaterfallCluster();
-    this.buildFountainPlaza();
+    this.buildVillageZone();
+    this.buildBridgeZone();
+    this.buildRestorationGrove();
+    this.buildWaterfallZone();
+    this.buildCrystalZone();
     this.buildAnimals();
     this.buildForeground();
     this.buildSnowfall();
@@ -117,16 +154,92 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.camera?.onResize();
   }
 
-  /* ---------------- opening camera reveal (section 23/24) ---------------- */
+  private close(): void {
+    Sfx.tap();
+    this.cameras.main.fadeOut(180, 20, 16, 30);
+    this.time.delayedCall(190, () => this.scene.stop());
+  }
+
+  /* ================= LOCKED PREVIEW (world-select presentation) ================= */
+
+  private buildLockedPreview(): void {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const cx = W / 2;
+
+    const root = this.add.container(0, 0);
+
+    const bg = this.add.graphics();
+    bg.fillGradientStyle(0x3a2f52, 0x2a2038, 0x1c2440, 0x14182c, 1);
+    bg.fillRect(0, 0, W, H);
+    root.add(bg);
+
+    const sceneScale = Math.min(W / 900, H / 1000);
+    const put = (key: string, x: number, y: number, scale: number, depth: number) =>
+      root.add(
+        this.add
+          .image(cx + x * sceneScale, H * 0.6 + y * sceneScale, key)
+          .setOrigin(0.5, 1)
+          .setScale(scale * sceneScale)
+          .setDepth(depth),
+      );
+
+    put("fv_pine", -280, -60, 0.55, 1);
+    put("fv_pine", 300, -90, 0.6, 1);
+    put("fv_magic_treehouse", -220, 40, 0.5, 2);
+    put("fv_waterfall", 230, -20, 0.55, 2);
+    put("fv_bridge", 40, 120, 0.5, 3);
+    put("fv_fountain_restored", -30, 60, 0.5, 4);
+    put("fv_crystal_a", 260, 100, 0.4, 3);
+    put("fv_cottage_a", -300, 130, 0.55, 4);
+
+    const dim = this.add.rectangle(0, 0, W, H, 0x0a0a18, 0.62).setOrigin(0, 0);
+    root.add(dim);
+
+    root.add(this.add.image(cx, H * 0.32, "fv_sparkle_trail").setScale(0.5).setAlpha(0.5));
+
+    root.add(
+      this.add
+        .text(cx, H * 0.4, "❄️ FROSTED VALLEY", { ...titleStyle(30), color: "#fef6e8", align: "center" })
+        .setOrigin(0.5),
+    );
+
+    const panelW = Math.min(W - 48, 380);
+    const lockPanel = makePanel(this, panelW, 150, { fill: 0x1c1a2e, edge: 0x4a4468 }).setPosition(cx, H * 0.58);
+    root.add(lockPanel);
+    root.add(this.add.text(cx, H * 0.58 - 40, "🔒", { fontSize: "40px" }).setOrigin(0.5));
+    root.add(
+      this.add
+        .text(cx, H * 0.58 + 18, "Complete the previous\nGarden to unlock this one!", {
+          ...bodyStyle(17, "#fef6e8"),
+          align: "center",
+          lineSpacing: 6,
+        })
+        .setOrigin(0.5),
+    );
+
+    root.add(
+      this.add.text(cx, H - safeInsets().bottom - 40, "TAP to Close", bodyStyle(15, "#c9c2d8")).setOrigin(0.5),
+    );
+
+    const scrim = this.add.rectangle(0, 0, W, H, 0xffffff, 0.001).setOrigin(0, 0).setInteractive();
+    scrim.on("pointerup", () => this.close());
+    root.add(scrim);
+
+    root.setAlpha(0);
+    this.tweens.add({ targets: root, alpha: 1, duration: 260 });
+  }
+
+  /* ================= opening camera reveal ================= */
 
   private async playOpeningReveal(): Promise<void> {
     this.flowBusy = true;
     this.camera.disable();
     this.camera.frameWide(OVERVIEW_CENTER.x, OVERVIEW_CENTER.y);
     this.showSkip();
-    if (!this.tourSkipped) await wait(this, 1500);
+    if (!this.tourSkipped) await wait(this, 1600);
     this.hideSkip();
-    await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, this.tourSkipped ? 500 : 900, 1);
+    await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, this.tourSkipped ? 500 : 950, SETTLE_ZOOM);
     this.camera.enable();
     this.flowBusy = false;
   }
@@ -154,53 +267,19 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.skipBtn = undefined;
   }
 
-  private close(): void {
-    Sfx.tap();
-    this.cameras.main.fadeOut(180, 20, 16, 30);
-    this.time.delayedCall(190, () => this.scene.stop());
-  }
-
-  /* ---------------- background ---------------- */
+  /* ================= background / terrain ================= */
 
   private buildSky(): void {
-    const sky = this.add
-      .image(0, 0, "sky")
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(-1000)
-      .setTint(0xcfe3f5);
+    const sky = this.add.image(0, 0, "sky").setOrigin(0, 0).setScrollFactor(0).setDepth(-1000).setTint(0xcfe3f5);
     sky.setDisplaySize(this.scale.width, this.scale.height);
 
-    this.add
-      .image(300, 140, "clouds")
-      .setOrigin(0, 0)
-      .setScrollFactor(0.1)
-      .setDepth(-900)
-      .setAlpha(0.85)
-      .setTint(0xffffff);
-    this.add
-      .image(1500, 90, "clouds")
-      .setOrigin(0, 0)
-      .setScrollFactor(0.16)
-      .setDepth(-900)
-      .setScale(0.8)
-      .setAlpha(0.6)
-      .setTint(0xffffff);
+    this.add.image(300, 140, "clouds").setOrigin(0, 0).setScrollFactor(0.05).setDepth(-900).setAlpha(0.85).setTint(0xffffff);
+    this.add.image(1500, 90, "clouds").setOrigin(0, 0).setScrollFactor(0.07).setDepth(-900).setScale(0.9).setAlpha(0.6).setTint(0xffffff);
+    this.add.image(2900, 60, "clouds").setOrigin(0, 0).setScrollFactor(0.06).setDepth(-900).setScale(0.8).setAlpha(0.5).setTint(0xffffff);
+    this.add.image(4300, 120, "clouds").setOrigin(0, 0).setScrollFactor(0.05).setDepth(-900).setScale(0.75).setAlpha(0.55).setTint(0xffffff);
 
-    this.add
-      .image(-160, HORIZON + 40, "hills_far")
-      .setOrigin(0, 1)
-      .setScrollFactor(0.32)
-      .setDepth(-820)
-      .setScale(1.4)
-      .setTint(0xb9cfe8);
-    this.add
-      .image(-220, HORIZON + 90, "hills_near")
-      .setOrigin(0, 1)
-      .setScrollFactor(0.5)
-      .setDepth(-780)
-      .setScale(1.4)
-      .setTint(0xd7e6f2);
+    this.add.image(-300, HORIZON + 40, "hills_far").setOrigin(0, 1).setScrollFactor(0.15).setDepth(-820).setScale(3.6).setTintFill(0xc3d9ee);
+    this.add.image(-380, HORIZON + 90, "hills_near").setOrigin(0, 1).setScrollFactor(0.25).setDepth(-780).setScale(3.6).setTintFill(0xe3edf7);
   }
 
   private buildGround(): void {
@@ -208,40 +287,61 @@ export class FrostedValleyScene extends Phaser.Scene {
     g.fillGradientStyle(0xe7eff8, 0xe7eff8, 0xf6fafd, 0xf6fafd, 1);
     g.fillRect(0, HORIZON - 4, WORLD_W, WORLD_H - HORIZON + 4);
 
-    // soft horizon blend, matching the main garden's convention
     const blend = this.add.graphics().setDepth(-185);
     blend.fillGradientStyle(0xcfe3f5, 0xcfe3f5, 0xe7eff8, 0xe7eff8, 0.9, 0.9, 0, 0);
     blend.fillRect(0, HORIZON - 90, WORLD_W, 120);
-
-    // a winding worn-snow path guiding the eye from the entrance up to the fountain
-    const path = this.add.graphics().setDepth(-150);
-    path.fillStyle(0xfdfaf3, 0.9);
-    const pts: Array<[number, number, number]> = [
-      [1300, 1750, 170],
-      [1320, 1500, 150],
-      [1300, 1260, 130],
-      [1300, 1060, 110],
-    ];
-    for (const [x, y, w] of pts) path.fillEllipse(x, y, w, 90);
-
-    this.add
-      .image(1560, WORLD_H + 10, "path")
-      .setOrigin(0.5, 1)
-      .setScale(1.2)
-      .setDepth(-140)
-      .setAlpha(0.4)
-      .setTint(0xe3ecf6);
   }
 
-  /* ---------------- clusters ---------------- */
+  /** A continuous winding trail linking every zone in order — the world's spine. */
+  private buildPath(): void {
+    const path = this.add.graphics().setDepth(-150);
+    path.fillStyle(0xfdfaf3, 0.92);
+    const pts = this.chain([ZONES.village, ZONES.bridge, ZONES.grove, ZONES.waterfall, ZONES.crystals], 9);
+    for (const p of pts) path.fillEllipse(p.x, p.y, 150, 78);
+  }
 
-  private prop(
+  /** Waterfall -> pool -> bridge crossing -> continued water, offset from the grove clearing. */
+  private buildRiver(): void {
+    const river = this.add.graphics().setDepth(-140);
+    river.fillStyle(0x8fd0e8, 0.85);
+    const src = { x: ZONES.waterfall.x - 60, y: ZONES.waterfall.y + 160 };
+    const mid = { x: ZONES.grove.x + 620, y: ZONES.grove.y - 120 };
+    const cross = { x: ZONES.bridge.x + 40, y: ZONES.bridge.y - 20 };
+    const tail = { x: ZONES.bridge.x - 340, y: ZONES.bridge.y + 560 };
+    const pts = this.chain([src, mid, cross, tail], 7);
+    for (const p of pts) river.fillEllipse(p.x, p.y, 230, 140);
+
+    const shimmer = this.add.graphics().setDepth(-138);
+    shimmer.fillStyle(0xcdeef7, 0.5);
+    for (const p of pts) shimmer.fillEllipse(p.x, p.y, 80, 44);
+  }
+
+  /** Linear-interpolated waypoint chain through a list of anchor points, `perLeg` points per leg. */
+  private chain(anchors: Array<{ x: number; y: number }>, perLeg: number): Array<{ x: number; y: number }> {
+    const out: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i < anchors.length - 1; i++) {
+      const a = anchors[i];
+      const b = anchors[i + 1];
+      for (let s = 0; s <= perLeg; s++) {
+        const t = s / perLeg;
+        out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      }
+    }
+    return out;
+  }
+
+  /* ================= scale-calibrated prop helper ================= */
+
+  /** Place a prop at a target WORLD-UNIT height (not native pixels) — see NATIVE_H. */
+  private propH(
     key: string,
     x: number,
     y: number,
-    scale = 1,
+    targetHeight: number,
     opts: { depth?: number; tint?: number; alpha?: number; flip?: boolean; scroll?: number } = {},
   ): Phaser.GameObjects.Image {
+    const native = NATIVE_H[key] ?? targetHeight;
+    const scale = targetHeight / native;
     const img = this.add.image(x, y, key).setOrigin(0.5, 1).setScale(scale);
     img.setDepth(opts.depth ?? y);
     if (opts.tint !== undefined) img.setTint(opts.tint);
@@ -251,90 +351,102 @@ export class FrostedValleyScene extends Phaser.Scene {
     return img;
   }
 
-  /** Distant, hazy pine line for depth — same tinted-hazy-tree-line idiom as the main garden. */
+  /** Distant hazy treeline along the world's back edge, for depth. */
   private buildForestFringe(): void {
-    for (let i = 0; i < 9; i++) {
-      const x = 80 + i * 300 + (i % 2) * 60;
-      this.prop("fv_pine", x, HORIZON + 60 + (i % 3) * 20, 0.55 + (i % 2) * 0.12, {
+    for (let i = 0; i < 22; i++) {
+      const x = 80 + i * 280 + (i % 2) * 70;
+      this.propH("fv_pine", x, HORIZON + 60 + (i % 3) * 20, 340 + (i % 2) * 60, {
         depth: -160,
         tint: 0xb9cfe8,
-        alpha: 0.9,
-        scroll: 0.9,
+        alpha: 0.85,
+        scroll: 0.94,
       });
     }
-    // mid-ground pines, full colour, framing the village and plaza
-    const midPines: Array<[number, number, number]> = [
-      [180, 640, 0.9],
-      [340, 700, 1.0],
-      [980, 640, 0.85],
-      [1620, 660, 0.9],
-      [2260, 700, 1.0],
-      [2340, 900, 0.85],
-    ];
-    for (const [x, y, s] of midPines) this.prop("fv_pine", x, y, s);
-
-    // the elaborate magic treehouse — a large background hero landmark, off to one side
-    this.prop("fv_magic_treehouse", 2150, 620, 1.15, { depth: 550 });
-
-    // a dormant, unrestored tree — the world isn't perfect yet (section 24)
-    this.prop("fv_dead_tree", 480, 980, 0.85);
   }
 
-  private buildVillageCluster(): void {
-    this.prop("fv_cottage_a", 560, 780, 1.05);
-    this.prop("fv_cottage_b", 830, 840, 0.85);
-    this.prop("fv_fence", 470, 900, 0.75);
-    this.prop("fv_fence", 640, 910, 0.75, { flip: true });
-    this.prop("fv_birdhouse_post", 960, 800, 0.65);
-    this.prop("fv_flower_bush", 700, 940, 0.6);
-    this.prop("fv_barrel_flowers", 400, 940, 0.55);
+  /* ================= ZONE A: Snowy Village ================= */
+
+  private buildVillageZone(): void {
+    const z = ZONES.village;
+    // framing pines well outside the clearing radius (~900+), not crowding the cottages
+    this.propH("fv_pine", z.x - 780, z.y - 420, 560);
+    this.propH("fv_pine", z.x - 950, z.y + 60, 620);
+    this.propH("fv_pine", z.x + 820, z.y - 520, 540);
+    this.propH("fv_magic_treehouse", z.x - 560, z.y - 40, 780, { tint: 0xe8e2f5 });
+
+    // cottages get real breathing room between them (~800 apart, each ~500-650 wide)
+    this.propH("fv_cottage_a", z.x - 120, z.y - 40, 600);
+    this.propH("fv_cottage_b", z.x + 680, z.y + 20, 520);
+    this.propH("fv_fence", z.x - 420, z.y + 90, 240);
+    this.propH("fv_fence", z.x + 140, z.y + 110, 240, { flip: true });
+    this.propH("fv_birdhouse_post", z.x + 980, z.y - 10, 300);
+    this.propH("fv_flower_bush", z.x + 300, z.y + 130, 210);
+    this.propH("fv_barrel_flowers", z.x - 620, z.y + 150, 230);
   }
 
-  private buildWaterfallCluster(): void {
-    this.prop("fv_waterfall", 1980, 760, 1.15);
-    this.prop("fv_riverbank", 1780, 960, 1.0);
-    this.prop("fv_icicles", 2140, 830, 0.6);
-    this.prop("fv_ice_block", 2260, 940, 0.55);
+  /* ================= ZONE B: Bridge / River crossing ================= */
 
-    // a simple river ribbon flowing down from the waterfall base
-    const river = this.add.graphics().setDepth(-130);
-    river.fillStyle(0x8fd0e8, 0.85);
-    const bank: Array<[number, number, number]> = [
-      [1970, 900, 140],
-      [1880, 1080, 170],
-      [1780, 1280, 190],
-      [1700, 1480, 200],
-    ];
-    for (const [x, y, w] of bank) river.fillEllipse(x, y, w, 110);
-
-    this.prop("fv_bridge", 1720, 1120, 1.1);
+  private buildBridgeZone(): void {
+    const z = ZONES.bridge;
+    this.propH("fv_bridge", z.x, z.y, 340);
+    this.propH("fv_icicles", z.x - 460, z.y + 60, 240);
+    this.propH("fv_flower_bush", z.x + 420, z.y + 90, 200);
+    this.propH("fv_pine", z.x + 600, z.y - 340, 520);
+    this.propH("fv_pine", z.x - 640, z.y - 260, 500);
   }
 
-  private buildFountainPlaza(): void {
-    this.prop("fv_crystal_a", FOUNTAIN.x - 210, FOUNTAIN.y + 20, 0.75);
-    this.prop("fv_crystal_b", FOUNTAIN.x + 220, FOUNTAIN.y + 10, 0.7, { flip: true });
-    this.prop("fv_flower_bush", FOUNTAIN.x + 60, FOUNTAIN.y + 90, 0.5);
+  /* ================= ZONE C: Restoration Grove ================= */
 
-    this.fountainDamaged = this.prop("fv_fountain_damaged", FOUNTAIN.x, FOUNTAIN.y, 1.0, {
-      depth: FOUNTAIN.y,
-    });
-    this.fountainRestored = this.prop("fv_fountain_restored", FOUNTAIN.x, FOUNTAIN.y, 1.0, {
-      depth: FOUNTAIN.y + 0.1,
-    });
+  private buildRestorationGrove(): void {
+    const z = ZONES.grove;
+    // the damaged landmark stands with open snow around it — a clear point of interest
+    this.fountainDamaged = this.propH("fv_fountain_damaged", z.x, z.y, 480);
+    this.fountainRestored = this.propH("fv_fountain_restored", z.x, z.y, 480, { depth: z.y + 0.1 });
     this.fountainRestored.setAlpha(0);
+
+    // a hint of neglect nearby, spaced apart, not overlapping
+    this.propH("fv_dead_tree", z.x - 620, z.y + 80, 480);
+
+    // sparse accents only — this zone stays deliberately open until restored
+    this.propH("fv_crystal_b", z.x + 560, z.y + 40, 260, { flip: true });
+    this.propH("fv_pine", z.x - 760, z.y - 380, 540);
+    this.propH("fv_pine", z.x + 780, z.y - 440, 520);
   }
+
+  /* ================= ZONE D: Frozen Waterfall ================= */
+
+  private buildWaterfallZone(): void {
+    const z = ZONES.waterfall;
+    this.propH("fv_waterfall", z.x, z.y, 740);
+    this.propH("fv_ice_block", z.x - 480, z.y + 120, 260);
+    this.propH("fv_riverbank", z.x - 120, z.y + 220, 380);
+    this.propH("fv_pine", z.x + 540, z.y - 200, 520);
+    this.propH("fv_pine", z.x - 620, z.y - 100, 500);
+    this.propH("fv_flower_bush", z.x + 400, z.y + 90, 190);
+  }
+
+  /* ================= ZONE E: Crystal Area ================= */
+
+  private buildCrystalZone(): void {
+    const z = ZONES.crystals;
+    this.propH("fv_crystal_a", z.x, z.y, 380);
+    this.propH("fv_crystal_b", z.x + 320, z.y + 60, 240);
+    this.propH("fv_icicles", z.x - 280, z.y + 40, 220);
+    this.propH("fv_pine", z.x - 460, z.y - 240, 460, { tint: 0xd7e6f2 });
+  }
+
+  /* ================= animals — open, readable ground ================= */
 
   private buildAnimals(): void {
-    const rabbit = this.prop("fv_rabbit", 640, 850, 0.42);
-    const fox = this.prop("fv_fox", FOUNTAIN.x - 120, FOUNTAIN.y + 60, 0.38);
-    const squirrel = this.prop("fv_squirrel", 2050, 900, 0.36, { flip: true });
+    const rabbit = this.propH("fv_rabbit", ZONES.village.x + 260, ZONES.village.y + 190, 220);
+    const fox = this.propH("fv_fox", ZONES.bridge.x - 80, ZONES.bridge.y + 180, 210);
+    const squirrel = this.propH("fv_squirrel", ZONES.waterfall.x - 320, ZONES.waterfall.y + 280, 190, { flip: true });
     this.idleTargets.push(rabbit, fox, squirrel);
   }
 
   private buildForeground(): void {
-    this.prop("fv_berry_branch", 90, 220, 1.3, { depth: 9000, scroll: 1.04 });
-    this.prop("fv_berry_branch", WORLD_W - 40, 260, 1.3, { depth: 9000, scroll: 1.04, flip: true });
-    this.prop("fv_crystal_b", FOUNTAIN.x, 200, 0.9, { depth: 9000, scroll: 1.02, alpha: 0.96 });
+    this.propH("fv_berry_branch", 140, 260, 420, { depth: 9000, scroll: 1.04 });
+    this.propH("fv_berry_branch", WORLD_W - 100, 300, 420, { depth: 9000, scroll: 1.04, flip: true });
   }
 
   /** Restrained ambient snow — a generated dot texture drifting slowly downward. */
@@ -360,7 +472,7 @@ export class FrostedValleyScene extends Phaser.Scene {
     emitter.setScrollFactor(0).setDepth(8000);
   }
 
-  /* ---------------- idle life ---------------- */
+  /* ================= idle life ================= */
 
   private startIdleBreathing(): void {
     for (const t of this.idleTargets) {
@@ -374,18 +486,15 @@ export class FrostedValleyScene extends Phaser.Scene {
         delay: Math.random() * 600,
       });
     }
-    // gentle idle sparkle drifting near the magic treehouse
     this.time.addEvent({
-      delay: 3400,
+      delay: 3600,
       loop: true,
       callback: () => {
-        const s = this.add.image(2150 + Phaser.Math.Between(-40, 40), 500, "fv_sparkle_trail")
-          .setScale(0.35)
-          .setAlpha(0)
-          .setDepth(560);
+        const gx = ZONES.grove.x - 500 + Phaser.Math.Between(-30, 30);
+        const s = this.add.image(gx, ZONES.grove.y - 700, "fv_sparkle_trail").setScale(0.28).setAlpha(0).setDepth(560);
         this.tweens.add({
           targets: s,
-          alpha: 0.8,
+          alpha: 0.75,
           y: s.y - 40,
           duration: 1600,
           ease: "Sine.easeOut",
@@ -395,36 +504,32 @@ export class FrostedValleyScene extends Phaser.Scene {
     });
   }
 
-  /* ---------------- interaction ---------------- */
+  /* ================= interaction ================= */
 
   private handleTap(x: number, y: number): void {
     if (this.flowBusy || this.restoring) return;
     Sfx.unlock();
-    const d = Phaser.Math.Distance.Between(x, y, FOUNTAIN.x, FOUNTAIN.y - 40);
-    if (d < 190 && !this.restored) this.triggerFountainRestore();
+    const d = Phaser.Math.Distance.Between(x, y, ZONES.grove.x, ZONES.grove.y - 40);
+    if (d < 260 && !this.restored) this.triggerFountainRestore();
   }
 
   /**
    * Stand-in for the eventual puzzle hookup: in the finished game, this should
-   * be called once the player solves this area's picture puzzle (mirroring
-   * `ProgressionService.recordPuzzleCompletion` + `PuzzleScene.onSolved` in the
-   * main Garden flow), not from a direct tap. Left as a tap for this isolated
-   * world-building pass so the restoration beat can be seen and reviewed.
+   * be called once the player solves this area's picture puzzle, not from a
+   * direct tap. Left as a tap for this world-building pass so the restoration
+   * beat can be seen and reviewed.
    */
   private async triggerFountainRestore(): Promise<void> {
     if (this.restoring || this.restored) return;
     this.restoring = true;
 
-    // 1. anticipation
     this.cameras.main.shake(160, 0.002);
     Sfx.sparkle();
     await wait(this, 220);
 
-    // 2. magical particles gather
-    const glow = await gatherGlow(this, FOUNTAIN.x, FOUNTAIN.y - 30, 650);
-    sparkleBurst(this, FOUNTAIN.x, FOUNTAIN.y - 30, 22, 70);
+    const glow = await gatherGlow(this, ZONES.grove.x, ZONES.grove.y - 30, 650);
+    sparkleBurst(this, ZONES.grove.x, ZONES.grove.y - 30, 22, 70);
 
-    // 3. damaged -> restored crossfade
     this.tweens.add({ targets: this.fountainDamaged, alpha: 0, duration: 420, ease: "Sine.easeIn" });
     this.tweens.add({
       targets: this.fountainRestored,
@@ -444,22 +549,14 @@ export class FrostedValleyScene extends Phaser.Scene {
       },
     });
     Sfx.fanfare();
-    petalPuff(this, FOUNTAIN.x, FOUNTAIN.y - 60, 14);
+    petalPuff(this, ZONES.grove.x, ZONES.grove.y - 60, 14);
 
     await wait(this, 500);
     this.tweens.add({ targets: glow, alpha: 0, duration: 500, onComplete: () => glow.destroy() });
 
-    // 4. a nearby animal reacts with an excited little hop
     const fox = this.idleTargets[1];
     if (fox) {
-      this.tweens.add({
-        targets: fox,
-        y: fox.y - 22,
-        duration: 200,
-        yoyo: true,
-        repeat: 2,
-        ease: "Sine.easeOut",
-      });
+      this.tweens.add({ targets: fox, y: fox.y - 22, duration: 200, yoyo: true, repeat: 2, ease: "Sine.easeOut" });
     }
 
     this.restored = true;
