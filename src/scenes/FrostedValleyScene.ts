@@ -128,28 +128,29 @@ const NATIVE_H: Record<string, number> = {
 
 const FV_KEYS = [...Object.keys(NATIVE_H), "fv_sparkle_trail", "fv_star_sparkle", "fv_glow_orb"];
 
-const WORLD_W = 7200;
-const WORLD_H = 5900;
-const HORIZON = 350;
-
 /**
- * Every zone sits at least ~900px in from every world edge (see the audit
- * that found fv_flower_arch sitting at x < 0 — the camera's bounds are a
- * hard [0,0]..[WORLD_W,WORLD_H] rect, so any prop past that edge could never
- * be panned into full view, which read as "panning stops short"). Zone
- * anchors carry a fixed offset from their original values so every prop
- * placed relative to `z.x`/`z.y` gets the same safety margin for free.
+ * The world is a single painted background image (fv_world_bg, native
+ * 2838x1472) stretched uniformly ×4 so its real terrain features — the
+ * meandering stream, the loop bend, the icy cliff, the lake — land at a
+ * scale that fits our existing prop-spacing conventions without warping
+ * its aspect ratio. Zone anchors below are that same native-image pixel
+ * position, sampled by eye from the reference, times BG_SCALE.
  */
-const ZONE_OFFSET_X = 900;
+const BG_NATIVE_W = 2838;
+const BG_NATIVE_H = 1472;
+const BG_SCALE = 4;
+const WORLD_W = BG_NATIVE_W * BG_SCALE + 1000; // +margin so the crystal zone's spread clears the right edge
+const WORLD_H = BG_NATIVE_H * BG_SCALE;
+const HORIZON = 0; // the background image is terrain edge-to-edge, no separate sky band
 
-/** Six distinct clearings, spaced well apart — the world's real structure. */
+/** Six distinct clearings, positioned on the real features of fv_world_bg. */
 const ZONES: Record<ZoneKey, { x: number; y: number }> = {
-  village: { x: 900 + ZONE_OFFSET_X, y: 4300 },
-  bridge: { x: 2150 + ZONE_OFFSET_X, y: 3500 },
-  grove: { x: 2950 + ZONE_OFFSET_X, y: 2600 },
-  waterfall: { x: 4150 + ZONE_OFFSET_X, y: 1500 },
-  crystals: { x: 4950 + ZONE_OFFSET_X, y: 850 },
-  shore: { x: 2750 + ZONE_OFFSET_X, y: 5250 },
+  village: { x: 450 * BG_SCALE, y: 750 * BG_SCALE }, // open flat snow, left-center
+  bridge: { x: 1150 * BG_SCALE, y: 420 * BG_SCALE }, // the river's narrow neck
+  grove: { x: 1550 * BG_SCALE, y: 580 * BG_SCALE }, // the river's big loop bend
+  waterfall: { x: 2400 * BG_SCALE, y: 150 * BG_SCALE }, // the icy cliff, upper-right
+  crystals: { x: 2750 * BG_SCALE, y: 220 * BG_SCALE }, // rocks beside the cliff
+  shore: { x: 2500 * BG_SCALE, y: 1200 * BG_SCALE }, // the lake, lower-right
 };
 
 const START_FOCUS = { x: ZONES.village.x, y: ZONES.village.y - 90 };
@@ -187,6 +188,7 @@ export class FrostedValleyScene extends Phaser.Scene {
   private treeSwayTargets: Phaser.GameObjects.Image[] = [];
   private crystalTargets: Phaser.GameObjects.Image[] = [];
   private lanternSpots: Array<{ x: number; y: number }> = [];
+  private chimneySpots: Array<{ x: number; y: number }> = [];
   private locked = false;
   private zoneAnimals: Partial<Record<ZoneKey, ZoneAnimalRec>> = {};
   private zoneItems: Partial<Record<ZoneKey, ItemPairRec[]>> = {};
@@ -199,6 +201,7 @@ export class FrostedValleyScene extends Phaser.Scene {
 
   preload(): void {
     for (const key of FV_KEYS) this.load.image(key, `assets/frosted/${key}.png`);
+    this.load.image("fv_world_bg", "assets/frosted/fv_world_bg.png");
   }
 
   create(): void {
@@ -215,6 +218,7 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.treeSwayTargets = [];
     this.crystalTargets = [];
     this.lanternSpots = [];
+    this.chimneySpots = [];
     this.zoneAnimals = {};
     this.zoneItems = {};
     this.hintBusy = false;
@@ -222,7 +226,7 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.buildSky();
     this.buildGround();
     this.buildPath();
-    this.buildRiver();
+    this.buildWaterSparkle();
     this.buildAtmosphere();
     this.buildForestFringe();
     this.buildDenseForest();
@@ -389,14 +393,16 @@ export class FrostedValleyScene extends Phaser.Scene {
   /* ================= background / terrain ================= */
 
   private buildSky(): void {
-    const sky = this.add.image(0, 0, "sky").setOrigin(0, 0).setScrollFactor(0).setDepth(-1000).setTint(0xcfe3f5);
-    sky.setDisplaySize(this.scale.width, this.scale.height);
+    // the background image is terrain edge-to-edge — just a plain fallback
+    // color behind it (visible only if the image hasn't painted a pixel) and
+    // a couple of very faint drifting clouds for the tiniest touch of life.
+    const fallback = this.add.rectangle(0, 0, WORLD_W, WORLD_H, 0xe7eff8, 1).setOrigin(0, 0).setDepth(-1000);
+    void fallback;
 
     const cloudDefs = [
-      { x: 300, y: 140, scroll: 0.05, scale: 1, alpha: 0.85 },
-      { x: 1500, y: 90, scroll: 0.07, scale: 0.9, alpha: 0.6 },
-      { x: 2900, y: 60, scroll: 0.06, scale: 0.8, alpha: 0.5 },
-      { x: 4300, y: 120, scroll: 0.05, scale: 0.75, alpha: 0.55 },
+      { x: 300, y: 40, scroll: 0.05, scale: 1, alpha: 0.35 },
+      { x: 1900, y: 20, scroll: 0.07, scale: 0.85, alpha: 0.25 },
+      { x: 4200, y: 0, scroll: 0.06, scale: 0.8, alpha: 0.2 },
     ];
     for (const c of cloudDefs) {
       const cloud = this.add
@@ -407,7 +413,6 @@ export class FrostedValleyScene extends Phaser.Scene {
         .setScale(c.scale)
         .setAlpha(c.alpha)
         .setTint(0xffffff);
-      // extremely subtle drift — background life without distracting from gameplay
       this.tweens.add({
         targets: cloud,
         x: c.x + 60,
@@ -417,38 +422,16 @@ export class FrostedValleyScene extends Phaser.Scene {
         ease: "Sine.easeInOut",
       });
     }
-
-    this.add.image(-300, HORIZON + 40, "hills_far").setOrigin(0, 1).setScrollFactor(0.15).setDepth(-820).setScale(3.6).setTintFill(0xc3d9ee);
-    this.add.image(-380, HORIZON + 90, "hills_near").setOrigin(0, 1).setScrollFactor(0.25).setDepth(-780).setScale(3.6).setTintFill(0xe3edf7);
   }
 
+  /**
+   * The world's ground/terrain/water is the painted fv_world_bg image itself
+   * — see the class doc for why: it replaces what used to be procedurally
+   * drawn Graphics (flat gradient + drift ellipses + the whole river/lake).
+   */
   private buildGround(): void {
-    const g = this.add.graphics().setDepth(-200);
-    g.fillGradientStyle(0xeef4fa, 0xeef4fa, 0xfafcff, 0xfafcff, 1);
-    g.fillRect(0, HORIZON - 4, WORLD_W, WORLD_H - HORIZON + 4);
-
-    const blend = this.add.graphics().setDepth(-185);
-    blend.fillGradientStyle(0xcfe3f5, 0xcfe3f5, 0xe7eff8, 0xe7eff8, 0.9, 0.9, 0, 0);
-    blend.fillRect(0, HORIZON - 90, WORLD_W, 120);
-
-    // soft terrain variation — drifts and faint frozen patches so the ground
-    // reads as snow rather than a flat canvas the props sit on top of.
-    const drifts = this.add.graphics().setDepth(-198);
-    let seed = 7;
-    const rand = () => {
-      seed = (seed * 16807) % 2147483647;
-      return seed / 2147483647;
-    };
-    for (let i = 0; i < 70; i++) {
-      const x = rand() * WORLD_W;
-      const y = HORIZON + 60 + rand() * (WORLD_H - HORIZON - 60);
-      const w = 220 + rand() * 460;
-      const h = w * (0.26 + rand() * 0.14);
-      const roll = rand();
-      const tone = roll > 0.72 ? 0xc9dcee : roll > 0.4 ? 0xd9e8f4 : 0xf6fbff;
-      drifts.fillStyle(tone, roll > 0.72 ? 0.35 : 0.5);
-      drifts.fillEllipse(x, y, w, h);
-    }
+    const bg = this.add.image(0, 0, "fv_world_bg").setOrigin(0, 0).setDepth(-200);
+    bg.setDisplaySize(WORLD_W, WORLD_H);
   }
 
   /** A continuous winding trail linking every zone in order — the world's spine. */
@@ -477,93 +460,50 @@ export class FrostedValleyScene extends Phaser.Scene {
     }
   }
 
-  /** Waterfall -> pool -> bridge crossing -> continued water, offset from the grove clearing. */
-  private buildRiver(): void {
-    const bank = this.add.graphics().setDepth(-142);
-    bank.fillStyle(0xf6fbff, 0.95);
-    const bankOuter = this.add.graphics().setDepth(-143);
-    bankOuter.fillStyle(0xdcebf7, 0.6);
-
-    const river = this.add.graphics().setDepth(-140);
-    river.fillStyle(0x8fd0e8, 0.85);
-    const src = { x: ZONES.waterfall.x - 60, y: ZONES.waterfall.y + 160 };
-    const mid = { x: ZONES.grove.x + 620, y: ZONES.grove.y - 120 };
-    const cross = { x: ZONES.bridge.x + 40, y: ZONES.bridge.y - 20 };
-    const tail = { x: ZONES.bridge.x - 340, y: ZONES.bridge.y + 560 };
-    const mouth = { x: ZONES.shore.x + 260, y: ZONES.shore.y - 180 };
-    const rawPts = this.chain([src, mid, cross, tail, mouth], 9);
-    // a gentle perpendicular wobble along the route so the river snakes
-    // naturally rather than running as dead-straight segments between anchors
-    const pts = rawPts.map((p, i) => {
-      const prev = rawPts[Math.max(0, i - 1)];
-      const next = rawPts[Math.min(rawPts.length - 1, i + 1)];
-      const dx = next.x - prev.x;
-      const dy = next.y - prev.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const wobble = Math.sin(i * 0.55) * 70;
-      return { x: p.x + (-dy / len) * wobble, y: p.y + (dx / len) * wobble };
-    });
-    for (const p of pts) {
-      bankOuter.fillEllipse(p.x, p.y, 330, 205);
-      bank.fillEllipse(p.x, p.y, 280, 172);
-      river.fillEllipse(p.x, p.y, 230, 140);
-    }
-
-    // a proper lake where the river widens out near the shore, not just a
-    // narrow stream the whole way — echoes the reference's still, wide pool
-    const lake = { x: mouth.x + 420, y: mouth.y + 350 };
-    bankOuter.fillEllipse(lake.x, lake.y, 1180, 760);
-    bank.fillEllipse(lake.x, lake.y, 1040, 660);
-    river.fillEllipse(lake.x, lake.y, 900, 560);
-    const lakeShimmer = this.add.graphics().setDepth(-138);
-    lakeShimmer.fillStyle(0xcdeef7, 0.45);
-    lakeShimmer.fillEllipse(lake.x - 120, lake.y - 80, 320, 160);
-    lakeShimmer.fillEllipse(lake.x + 180, lake.y + 60, 260, 130);
-    this.tweens.add({ targets: lakeShimmer, alpha: 0.15, duration: 2400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-
-    const shimmer = this.add.graphics().setDepth(-138);
-    shimmer.fillStyle(0xcdeef7, 0.5);
-    for (const p of pts) shimmer.fillEllipse(p.x, p.y, 80, 44);
-    // gentle glinting-water pulse — the whole shimmer layer breathes in alpha
-    this.tweens.add({ targets: shimmer, alpha: 0.15, duration: 1900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-
-    // a few drifting sparkle motes along the water, staggered so they don't sync
-    pts
-      .filter((_, i) => i % 6 === 0)
-      .forEach((p, i) => {
-        const dot = this.add.image(p.x, p.y - 10, "fv_star_sparkle").setScale(0.06).setAlpha(0).setDepth(-137);
-        this.time.delayedCall(i * 700, () => {
-          this.tweens.add({
-            targets: dot,
-            alpha: { from: 0, to: 0.8 },
-            scale: { from: 0.05, to: 0.09 },
-            duration: 1200,
-            yoyo: true,
-            repeat: -1,
-            repeatDelay: 1400 + Math.random() * 1600,
-            ease: "Sine.easeInOut",
-          });
+  /**
+   * The river, its banks, and the lake are all painted into fv_world_bg now —
+   * see `buildGround`. A few drifting sparkle motes along the water's actual
+   * path (still estimated from the background image) are the only thing left
+   * to add procedurally, as a light touch of life on top of the painted water.
+   */
+  private buildWaterSparkle(): void {
+    const spots = [
+      { x: 1150 * BG_SCALE, y: 300 * BG_SCALE },
+      { x: 1400 * BG_SCALE, y: 480 * BG_SCALE },
+      { x: 1000 * BG_SCALE, y: 650 * BG_SCALE },
+      { x: 2350 * BG_SCALE, y: 1150 * BG_SCALE },
+    ];
+    spots.forEach((p, i) => {
+      this.time.delayedCall(i * 500, () => {
+        this.time.addEvent({
+          delay: 1800 + Math.random() * 1200,
+          loop: true,
+          callback: () => {
+            const dot = this.add
+              .image(p.x + Phaser.Math.Between(-60, 60), p.y + Phaser.Math.Between(-30, 30), "fv_star_sparkle")
+              .setScale(0.05)
+              .setAlpha(0)
+              .setDepth(-137);
+            this.tweens.add({
+              targets: dot,
+              alpha: 0.7,
+              duration: 900,
+              yoyo: true,
+              onComplete: () => dot.destroy(),
+            });
+          },
         });
       });
+    });
   }
 
   /**
-   * Atmospheric ground detail: frost cracks radiating across the open snow,
-   * and small paw-print trails leading toward each zone's hidden animal —
-   * cheap procedural Graphics, no new art needed.
+   * Atmospheric ground detail: small paw-print trails leading toward each
+   * zone's hidden animal — cheap procedural Graphics, no new art needed. The
+   * frost-crack detail from the earlier procedural-ground pass is gone now
+   * that the painted background supplies its own ground texture.
    */
   private buildAtmosphere(): void {
-    const cracks = this.add.graphics().setDepth(-145);
-    cracks.lineStyle(4, 0x9fc2dc, 0.55);
-    const crackOrigins = [
-      { x: 1550 + ZONE_OFFSET_X, y: 3950 },
-      { x: 2600 + ZONE_OFFSET_X, y: 3050 },
-      { x: 3600 + ZONE_OFFSET_X, y: 2000 },
-      { x: 4550 + ZONE_OFFSET_X, y: 1150 },
-      { x: 1450 + ZONE_OFFSET_X, y: 4650 },
-    ];
-    for (const o of crackOrigins) this.drawCrack(cracks, o.x, o.y, 5, 110);
-
     if (!this.textures.exists("fv_pawprint")) {
       const g = this.make.graphics({}, false);
       g.fillStyle(0x9fc2dc, 1);
@@ -583,25 +523,6 @@ export class FrostedValleyScene extends Phaser.Scene {
       { from: { x: ZONES.shore.x - 200, y: ZONES.shore.y + 260 }, to: { x: ZONES.shore.x, y: ZONES.shore.y + 190 } },
     ];
     for (const t of trails) this.drawPawTrail(t.from, t.to);
-  }
-
-  /** A jagged branching frost crack, drawn as short connected segments. */
-  private drawCrack(g: Phaser.GameObjects.Graphics, x: number, y: number, branches: number, len: number): void {
-    for (let b = 0; b < branches; b++) {
-      const angle = (Math.PI * 2 * b) / branches + Phaser.Math.FloatBetween(-0.3, 0.3);
-      let cx = x;
-      let cy = y;
-      let a = angle;
-      const segs = 3 + Math.floor(Math.random() * 3);
-      for (let s = 0; s < segs; s++) {
-        a += Phaser.Math.FloatBetween(-0.5, 0.5);
-        const nx = cx + Math.cos(a) * len;
-        const ny = cy + Math.sin(a) * len * 0.6;
-        g.lineBetween(cx, cy, nx, ny);
-        cx = nx;
-        cy = ny;
-      }
-    }
   }
 
   /** A short trail of alternating paw prints leading toward a hidden animal. */
@@ -785,14 +706,18 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.treeSwayTargets.push(this.propH("fv_pine_d", z.x - 1050, z.y - 580, 480));
     this.propH("fv_magic_treehouse", z.x - 560, z.y - 40, 780, { tint: 0xe8e2f5 });
     this.groundShadow(z.x - 560, z.y - 40, 520, z.y - 40);
+    this.chimneySpots.push({ x: z.x - 510, y: z.y - 40 - 740 });
 
     // cottages get real breathing room between them (~800 apart, each ~500-650 wide)
     this.propH("fv_cottage_a", z.x - 120, z.y - 40, 600);
     this.groundShadow(z.x - 120, z.y - 40, 420, z.y - 40);
+    this.chimneySpots.push({ x: z.x - 40, y: z.y - 40 - 560 });
     this.propH("fv_cottage_b", z.x + 680, z.y + 20, 520);
     this.groundShadow(z.x + 680, z.y + 20, 360, z.y + 20);
+    this.chimneySpots.push({ x: z.x + 760, y: z.y + 20 - 480 });
     this.propH("fv_cottage_c", z.x + 1320, z.y + 140, 470);
     this.groundShadow(z.x + 1320, z.y + 140, 320, z.y + 140);
+    this.chimneySpots.push({ x: z.x + 1390, y: z.y + 140 - 430 });
     this.lanternSpots.push({ x: z.x - 210, y: z.y - 260 }, { x: z.x + 560, y: z.y - 220 }, { x: z.x + 1200, y: z.y - 90 });
 
     this.propH("fv_fence", z.x - 420, z.y + 90, 240);
@@ -1103,6 +1028,7 @@ export class FrostedValleyScene extends Phaser.Scene {
     for (const c of this.crystalTargets) {
       const baseScaleX = c.scaleX;
       const baseScaleY = c.scaleY;
+      const baseY = c.y;
       this.tweens.add({
         targets: c,
         scaleX: baseScaleX * 1.035,
@@ -1113,6 +1039,16 @@ export class FrostedValleyScene extends Phaser.Scene {
         repeat: -1,
         ease: "Sine.easeInOut",
         delay: Math.random() * 900,
+      });
+      // a gentle floating bob, independent of the pulse above
+      this.tweens.add({
+        targets: c,
+        y: baseY - 5,
+        duration: 2000 + Math.random() * 400,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+        delay: Math.random() * 700,
       });
       this.time.addEvent({
         delay: 2600 + Math.random() * 2000,
@@ -1136,6 +1072,39 @@ export class FrostedValleyScene extends Phaser.Scene {
       });
     }
 
+    // gentle chimney smoke — a lived-in, cozy touch on every roofline
+    if (!this.textures.exists("fv_smoke_puff")) {
+      const g = this.make.graphics({}, false);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(9, 9, 9);
+      g.generateTexture("fv_smoke_puff", 18, 18);
+      g.destroy();
+    }
+    for (const spot of this.chimneySpots) {
+      this.time.addEvent({
+        delay: 2200 + Math.random() * 1200,
+        loop: true,
+        callback: () => {
+          const puff = this.add
+            .image(spot.x + Phaser.Math.Between(-6, 6), spot.y, "fv_smoke_puff")
+            .setDepth(spot.y + 3)
+            .setScale(0.35)
+            .setAlpha(0)
+            .setTint(0xd8dee6);
+          this.tweens.add({
+            targets: puff,
+            y: spot.y - 90,
+            x: puff.x + Phaser.Math.Between(-20, 30),
+            scale: 0.9,
+            alpha: { from: 0, to: 0.45 },
+            duration: 2600,
+            ease: "Sine.easeOut",
+            onComplete: () => this.tweens.add({ targets: puff, alpha: 0, duration: 500, onComplete: () => puff.destroy() }),
+          });
+        },
+      });
+    }
+
     // waterfall base mist/sparkle — a light touch of motion on the two cascades
     for (const wf of [ZONES.waterfall, { x: ZONES.waterfall.x + 680, y: ZONES.waterfall.y + 260 }]) {
       this.time.addEvent({
@@ -1150,6 +1119,39 @@ export class FrostedValleyScene extends Phaser.Scene {
             duration: 900,
             ease: "Sine.easeOut",
             onComplete: () => this.tweens.add({ targets: mote, alpha: 0, duration: 400, onComplete: () => mote.destroy() }),
+          });
+        },
+      });
+    }
+
+    // small expanding ripple rings where the waterfalls meet their pool
+    if (!this.textures.exists("fv_ripple_ring")) {
+      const g = this.make.graphics({}, false);
+      g.lineStyle(3, 0xffffff, 1);
+      g.strokeCircle(20, 20, 18);
+      g.generateTexture("fv_ripple_ring", 40, 40);
+      g.destroy();
+    }
+    for (const pool of [
+      { x: ZONES.waterfall.x, y: ZONES.waterfall.y + 260 },
+      { x: ZONES.waterfall.x + 680, y: ZONES.waterfall.y + 400 },
+    ]) {
+      this.time.addEvent({
+        delay: 1300 + Math.random() * 500,
+        loop: true,
+        callback: () => {
+          const ring = this.add
+            .image(pool.x + Phaser.Math.Between(-30, 30), pool.y + Phaser.Math.Between(-16, 16), "fv_ripple_ring")
+            .setDepth(pool.y + 4)
+            .setScale(0.5)
+            .setAlpha(0.8);
+          this.tweens.add({
+            targets: ring,
+            scale: 1.3,
+            alpha: 0,
+            duration: 1400,
+            ease: "Sine.easeOut",
+            onComplete: () => ring.destroy(),
           });
         },
       });
