@@ -17,29 +17,23 @@ export interface RegionOverlayOpts {
 }
 
 /**
- * A plain grey "still asleep" wash for a region we haven't wired up yet — signals
- * to the player that the garden extends here and will come alive later. No bloom.
- */
-export function addDormantVeil(
-  scene: Phaser.Scene,
-  rect: RegionRect,
-): Phaser.GameObjects.Image {
-  return scene.add
-    .image(rect.x, rect.y - 20, "meadow_lush")
-    .setDepth(118)
-    .setTint(0x7c789a)
-    .setAlpha(0.5)
-    .setDisplaySize(rect.w * 1.7, rect.h * 2.0)
-    .setBlendMode(Phaser.BlendModes.MULTIPLY);
-}
-
-/**
- * The "neglect veil" over a garden region: a soft desaturating wash plus a hidden
- * lush-grass patch and dormant flowers that bloom in when the region is restored.
+ * The "not restored yet" signal for a garden region, and the "coming alive"
+ * moment when it is.
+ *
+ * This used to be a large tinted image the size of the whole region rect (a
+ * grey/purple "veil" while dormant, a green "lush" patch fading in on top) —
+ * visually that reads as a rectangular filter laid over the artwork rather
+ * than damage IN the world, and at the scale several regions render at, their
+ * veils overlapped into one large grey/brown blob spanning most of the map.
+ * Removed. Damage/dormancy now lives in the actual assets `buildProps()`
+ * places per region (a dead tree, a cracked fountain, sparse/dry vegetation,
+ * a dead shrub) — this class now only owns the flower-scatter bloom-in, a
+ * small, localized effect, not a full-region wash. Same public contract
+ * (`restore()` / `applyRestoredInstant()` / `.restored`) as before, so
+ * RevealSequencer, GardenScene, and the progression/save system are
+ * unaffected — this is a presentation-only change.
  */
 export class RegionOverlay {
-  private veil: Phaser.GameObjects.Image;
-  private lush: Phaser.GameObjects.Image;
   private flowers: Phaser.GameObjects.Image[] = [];
   restored = false;
 
@@ -49,20 +43,6 @@ export class RegionOverlay {
     seed: number,
     opts: RegionOverlayOpts = {},
   ) {
-    this.lush = scene.add
-      .image(rect.x, rect.y, "meadow_lush")
-      .setDepth(2)
-      .setAlpha(0)
-      .setDisplaySize(rect.w * 1.25, rect.h * 1.35);
-
-    this.veil = scene.add
-      .image(rect.x, rect.y - 20, "meadow_lush")
-      .setDepth(120)
-      .setTint(0x74708f)
-      .setAlpha(0.55)
-      .setDisplaySize(rect.w * 1.7, rect.h * 2.0)
-      .setBlendMode(Phaser.BlendModes.MULTIPLY);
-
     const rng = new Phaser.Math.RandomDataGenerator([String(seed)]);
     const count = opts.flowerCount ?? 7;
     const tints = opts.flowerTints ?? [];
@@ -82,14 +62,11 @@ export class RegionOverlay {
     }
   }
 
-  /** Play the restoration: veil lifts, lush grass and flowers bloom in. */
+  /** Play the restoration: flowers bloom in across the region, one by one. */
   restore(): Promise<void> {
     if (this.restored) return Promise.resolve();
     this.restored = true;
     const scene = this.scene;
-
-    scene.tweens.add({ targets: this.veil, alpha: 0, duration: 1100, ease: "Sine.easeOut" });
-    scene.tweens.add({ targets: this.lush, alpha: 0.85, duration: 1100, ease: "Sine.easeOut" });
 
     return new Promise((resolve) => {
       this.flowers.forEach((f, i) => {
@@ -119,8 +96,6 @@ export class RegionOverlay {
   /** Apply saved state instantly (on reload) with no animation. */
   applyRestoredInstant(): void {
     this.restored = true;
-    this.veil.setAlpha(0);
-    this.lush.setAlpha(0.85);
     this.flowers.forEach((f) => {
       f.setScale(Phaser.Math.FloatBetween(0.7, 1)).setAlpha(1);
       this.scene.tweens.add({

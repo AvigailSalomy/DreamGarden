@@ -126,6 +126,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       (window as unknown as Record<string, unknown>).__dgSkipTour = () => {
         this.tourSkipped = true;
       };
+      (window as unknown as Record<string, unknown>).__dgReveal = (objectId: string) => {
+        const def = progression.def(objectId);
+        return def ? this.reveal.play(def) : Promise.reject(new Error("unknown object"));
+      };
     }
   }
 
@@ -530,42 +534,57 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.treeOfKind("tree_pine", 3270, 1470, 2.4, { depth: 7200, scroll: 1 });
   }
 
+  /**
+   * World flow (see the world-composition pass): ENTRANCE (animalMeadow) →
+   * DORMANT AREA (flowerBed) / COTTAGE GARDEN (cottageYard) → MAGIC TREE GROVE
+   * (treeGrove) → FOUNTAIN + WATER/BRIDGE (pondside, one clearing) → LOCKED
+   * AREA (farmCorner). One winding path asset, repeated at a few rotations,
+   * threads the main destinations together rather than sitting disconnected.
+   */
   private buildProps(): void {
     this.buildTrees();
+    this.buildPaths();
 
     // ---- neglected landmark: Garden Heart (future) ----
     this.prop("heart_dormant", 1560, 980, 1.15, 150);
+    this.dprop("nature/rock_small_01", 1440, 1010, 0.15, 110);
+    this.dprop("vegetation/fern_01", 1660, 1000, 0.14);
 
-    // ---- archway + cottage-yard fence (the songbird perch) ----
-    // flower_arch_01 replaces the old bare wooden arch — same spot/role, dressed.
-    this.dprop("vegetation/flower_arch_01", 1560, 1170, 0.62);
-    // a shorter, gapped fence run either side of the arch (not an unbroken wall
-    // of identical repeats) — a real split-rail fence reads as a boundary marker
-    // with openings, not a solid mechanical row.
+    // ---- cottage garden (the songbird's cottage yard) ----
+    // One destination, one purpose each: arch marks the entrance, a short
+    // gapped fence marks the yard boundary (not a wall), the cottage is given
+    // its own clearing, and each small object sits at the spot that gives it
+    // a reason to be there.
+    this.dprop("vegetation/flower_arch_01", 1560, 1170, 0.62); // entrance, on the path from the meadow
     for (const [x, y, s] of [
-      [1180, 1288, 0.32],
-      [1480, 1300, 0.34],
+      [1420, 1300, 0.34],
       [1660, 1280, 0.3],
-      [1940, 1120, 0.26],
     ] as const)
-      this.dprop("decor/fence_01", x, y, s);
-    // a cosy cottage tucked behind the fence line — new, purely decorative depth
-    this.dprop("structures/cottage_small_01", 1980, 1230, 0.42, 260);
-    this.dprop("decor/lantern_01", 1700, 1250, 0.22);
-    this.dprop("decor/bench_01", 1420, 1260, 0.2, 140);
-    this.dprop("decor/birdhouse_01", 1260, 1180, 0.18);
-    this.critter("animals/squirrel", 2020, 1300, 0.15);
+      this.dprop("decor/fence_01", x, y, s); // yard boundary either side of the arch — not a wall
+    this.dprop("structures/cottage_small_01", 1980, 1230, 0.44, 260); // its own clearing, not buried in trees
+    // the cottage lantern is unlit/dim until Pip comes home — a localized
+    // damage cue instead of a region-wide tint
+    const cottageLit = progression.isUnlocked("bird");
+    this.dprop("decor/lantern_01", 1860, 1280, 0.22)
+      .setTint(cottageLit ? 0xffffff : 0x50505c)
+      .setAlpha(cottageLit ? 1 : 0.8);
+    this.dprop("decor/flower_cart_01", 2080, 1310, 0.2, 150); // cart belongs to the cottage garden
+    this.dprop("decor/birdhouse_01", 1260, 1180, 0.18); // near the perch/arch, where a bird would actually nest
+    // bench faces the cottage clearing, not wedged against the fence
+    this.dprop("decor/bench_01", 1840, 1360, 0.2, 140);
 
-    // ---- animal meadow (rabbit) ----
-    this.prop("dead_shrub", 640, 1440, 1.0, 150);
-    this.dprop("vegetation/bush_green_01", 820, 1560, 0.2);
-    this.dprop("vegetation/fern_01", 1000, 1440, 0.17);
-    this.dprop("vegetation/flowers_yellow_01", 1120, 1560, 0.19);
-    this.dprop("nature/rock_medium_01", 560, 1620, 0.2, 150);
-    this.dprop("nature/mushrooms_01", 1050, 1660, 0.13);
-    this.critter("animals/hedgehog", 700, 1610, 0.13);
+    // ---- animal meadow (rabbit) — the entrance, and a hero clearing ----
+    // one damage cue (the dead shrub), one rock+moss cluster the hedgehog
+    // actually lives in, one flower patch, generous open ground between them
+    this.prop("dead_shrub", 640, 1420, 1.0, 150);
+    this.dprop("nature/rock_medium_01", 560, 1600, 0.2, 150);
+    this.dprop("nature/mushrooms_01", 700, 1650, 0.13);
+    this.critter("animals/hedgehog", 660, 1610, 0.13); // rocks + bushes, per its actual habitat
+    this.dprop("vegetation/fern_01", 500, 1660, 0.15);
+    this.dprop("vegetation/flowers_yellow_01", 1140, 1580, 0.19);
+    this.dprop("vegetation/bush_green_01", 1220, 1500, 0.19);
 
-    // ---- flower bed (Wildflowers) ----
+    // ---- flower bed — the dormant/damaged area, right by the entrance ----
     // The Wildflowers object sprite (wildflower_bed) at (470,1652) IS the planter —
     // flowers grow from its own soil, so it stays untouched; this only dresses the
     // ground AROUND it. Restored/unrestored flower art frames the same spot the
@@ -575,39 +594,59 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.dprop(wildflowersDone ? "vegetation/vegetation_01" : "vegetation/vegetation_04", 260, 1560, 0.22);
     this.dprop("vegetation/flowers_pink_01", 300, 1520, 0.18);
     this.dprop("nature/rock_small_01", 690, 1660, 0.16, 120);
-    this.dprop("decor/sign_01", 120, 1600, 0.16);
+    this.dprop("decor/sign_01", 200, 1520, 0.16); // marks the meadow/flowerbed path junction
 
-    // ---- tree grove (future: the dead Great Oak) ----
+    // ---- magic tree grove — the dead Great Oak, a hero restoration with its
+    // own restrained cluster and open ground kept clear around it ----
     this.prop("oak_dead", 2500, 1460, 1.2, 220);
-    this.dprop("nature/log_01", 2140, 1420, 0.22, 160);
-    this.prop("sapling", 2320, 1440, 1.0, 90);
-    this.prop("sapling", 2260, 1600, 0.9, 80);
-    this.dprop("nature/rock_large_01", 2660, 1620, 0.24, 170);
-    this.dprop("vegetation/hedge_straight_01", 2440, 1660, 0.26);
-    this.dprop("decor/sign_01", 2060, 1520, 0.16);
-    this.critter("animals/fox", 2760, 1500, 0.16, true);
-    this.critter("animals/deer", 2380, 1560, 0.18);
+    this.dprop("nature/rock_medium_01", 2680, 1560, 0.2, 150);
+    this.prop("sapling", 2320, 1500, 0.9, 80);
+    this.dprop("decor/sign_01", 2140, 1400, 0.16); // marks the cottage/grove path junction
+    // supporting trees/vegetation sit farther back, framing rather than crowding
+    this.dprop("vegetation/hedge_straight_01", 2760, 1640, 0.26);
+    this.dprop("nature/log_01", 2820, 1500, 0.2, 150);
+    // the grove's own woodland residents
+    this.critter("animals/squirrel", 2260, 1560, 0.15);
+    this.critter("animals/fox", 2780, 1420, 0.16, true);
+    this.critter("animals/deer", 2560, 1620, 0.18);
 
-    // ---- farm corner (future) ----
-    this.prop("crate", 2560, 980, 1.0, 180);
-    this.prop("crate", 2740, 1040, 0.9, 160);
+    // ---- locked area (future) — visibly a destination, deliberately sparse ----
     this.dprop("structures/animal_house_01", 2860, 1000, 0.24, 140);
-    this.dprop("decor/planter_01", 2620, 1100, 0.17);
-    this.dprop("decor/sign_01", 2860, 1020, 0.16);
+    this.dprop("decor/planter_01", 2660, 1080, 0.17);
+    this.dprop("decor/sign_01", 2860, 1160, 0.16);
 
-    // ---- pondside: the damaged fountain clearing ----
-    // The hero landmark here is a genuine damaged↔restored PRODUCTION PAIR (see
-    // buildPond) — it gets real open space around it rather than being crowded
-    // by decoration, so it reads as the destination, not one prop among many.
+    // ---- fountain + water/bridge clearing (pondside) — one coherent water
+    // area, not two: the cracked fountain, the waterfall feeding it, and the
+    // bridge crossing the water it feeds, sharing one clearing ----
     this.buildPond();
-    this.dprop("nature/rock_medium_01", 1200, 1940, 0.18, 140);
-    this.dprop("vegetation/bush_mixed_01", 1880, 1920, 0.19);
-    this.dprop("decor/sign_01", 1080, 1840, 0.16);
-    // the bridge/rocks/picnic spot sit apart, at the clearing's far edge —
-    // a second small destination, not a wall around the fountain
-    this.dprop("structures/bridge_wood_01", 1780, 2140, 0.34);
-    this.dprop("nature/rock_large_01", 2000, 2160, 0.22, 180);
-    this.dprop("decor/picnic_table_01", 1620, 2220, 0.2, 160);
+    // rock/bush transition blending the fountain's edge into the lawn
+    this.dprop("nature/rock_medium_01", 1220, 1920, 0.18, 140);
+    this.dprop("vegetation/bush_mixed_01", 1860, 1900, 0.19);
+    this.dprop("decor/sign_01", 1100, 1820, 0.16); // marks the meadow/pond path junction
+    // the bench looks out over the water, the picnic spot sits by the bridge
+    this.dprop("decor/bench_01", 1260, 2180, 0.2, 140);
+    this.dprop("decor/picnic_table_01", 1980, 2200, 0.2, 160);
+  }
+
+  /**
+   * One winding path asset (a hand-drawn organic S-curve, not a repeatable
+   * straight tile), placed a few times at different rotations/scales to
+   * thread the meadow (entrance) to the cottage garden, the grove, and the
+   * fountain clearing — a route to follow, not disconnected dirt patches.
+   */
+  private buildPaths(): void {
+    const seg = (x: number, y: number, scale: number, angle: number, alpha = 1) =>
+      this.add.image(x, y, "path").setOrigin(0.5, 0.5).setScale(scale).setAngle(angle).setDepth(-110).setAlpha(alpha);
+
+    // meadow (entrance) -> cottage garden
+    seg(1180, 1420, 0.62, 100);
+    seg(1440, 1330, 0.55, 78);
+    // cottage garden -> magic tree grove
+    seg(1940, 1340, 0.58, 96);
+    seg(2220, 1400, 0.5, 82);
+    // meadow -> fountain clearing (south spur)
+    seg(1200, 1700, 0.6, 148);
+    seg(1380, 1880, 0.55, 165);
   }
 
   /**
