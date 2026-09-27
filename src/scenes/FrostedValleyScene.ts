@@ -509,6 +509,18 @@ export class FrostedValleyScene extends Phaser.Scene {
       river.fillEllipse(p.x, p.y, 230, 140);
     }
 
+    // a proper lake where the river widens out near the shore, not just a
+    // narrow stream the whole way — echoes the reference's still, wide pool
+    const lake = { x: mouth.x + 420, y: mouth.y + 350 };
+    bankOuter.fillEllipse(lake.x, lake.y, 1180, 760);
+    bank.fillEllipse(lake.x, lake.y, 1040, 660);
+    river.fillEllipse(lake.x, lake.y, 900, 560);
+    const lakeShimmer = this.add.graphics().setDepth(-138);
+    lakeShimmer.fillStyle(0xcdeef7, 0.45);
+    lakeShimmer.fillEllipse(lake.x - 120, lake.y - 80, 320, 160);
+    lakeShimmer.fillEllipse(lake.x + 180, lake.y + 60, 260, 130);
+    this.tweens.add({ targets: lakeShimmer, alpha: 0.15, duration: 2400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+
     const shimmer = this.add.graphics().setDepth(-138);
     shimmer.fillStyle(0xcdeef7, 0.5);
     for (const p of pts) shimmer.fillEllipse(p.x, p.y, 80, 44);
