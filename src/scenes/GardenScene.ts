@@ -91,13 +91,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.layoutScreen();
 
     this.camera = new CameraController(this, { w: WORLD_WIDTH, h: WORLD_HEIGHT });
-    if (!save.state.openingGardenTourSeen) {
-      // fresh game: first impression is the WHOLE neglected garden
-      this.camera.frameWide(GARDEN_CENTER.x, GARDEN_CENTER.y);
-    } else {
-      this.cameras.main.setZoom(1);
-      this.cameras.main.centerOn(START_FOCUS.x, START_FOCUS.y);
-    }
+    // every entry starts on the WHOLE neglected garden — first impression of scale
+    // and what's broken — then either the long first-time tour or the short
+    // `playEntryZoomReveal()` below eases it into the normal gameplay framing.
+    this.camera.frameWide(GARDEN_CENTER.x, GARDEN_CENTER.y);
     this.camera.onTap = (x, y) => this.handleTap(x, y);
 
     this.reveal = new RevealSequencer(this);
@@ -156,15 +153,41 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       void this.runOpeningCinematic();
       return;
     }
-    if (task && !progression.isUnlocked(task.id) && !save.state.lettersSeen[task.id]) {
-      void this.presentLetterThenActivate(task.id);
-      return;
-    }
-    // plain continue
-    this.camera.enable();
-    this.ui.setRevealing(false);
-    this.ui.setTaskFromProgression();
-    this.ui.showCard();
+
+    // Every other real session start: a short "wow, look at all of this" wide
+    // reveal, then ease into whatever this entry would normally do. This never
+    // replays on returning from a paused minigame/modal — GardenScene.create()
+    // (and therefore beginEntryFlow) only runs once per app session.
+    void this.playEntryZoomReveal().then(() => {
+      if (task && !progression.isUnlocked(task.id) && !save.state.lettersSeen[task.id]) {
+        void this.presentLetterThenActivate(task.id);
+        return;
+      }
+      // plain continue
+      this.camera.enable();
+      this.ui.setRevealing(false);
+      this.ui.setTaskFromProgression();
+      this.ui.showCard();
+    });
+  }
+
+  /**
+   * The compact entry cinematic for every session after the very first: hold the
+   * wide "whole neglected garden" framing (already set in `create()`) for a beat,
+   * then smoothly pull in to the normal gameplay position/zoom. HUD chrome fades
+   * out for the hold and fades back in once we've arrived. No instant zoom snap —
+   * the whole thing rides `CameraController.focusOn`'s eased pan+zoom tween, and
+   * `frameWide`/`focusOn` already clamp to the world bounds so nothing empty shows.
+   */
+  private async playEntryZoomReveal(): Promise<void> {
+    this.camera.disable();
+    this.ui.setRevealing(true);
+    this.ui.setHudVisible(false);
+
+    await wait(this, 1200); // "wow — this whole place is damaged" (spec: ~1.0–1.5s)
+    await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, 1600, 1); // "...let's start fixing it" (~1.2–1.8s)
+
+    this.ui.setHudVisible(true);
   }
 
   private async runOpeningCinematic(): Promise<void> {

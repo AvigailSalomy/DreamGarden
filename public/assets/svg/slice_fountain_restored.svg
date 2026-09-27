@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="340" viewBox="0 0 300 340">
+  <defs>
+    <linearGradient id="stoneR" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3dcb4"/><stop offset="1" stop-color="#d8b085"/>
+    </linearGradient>
+    <linearGradient id="stoneR2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#efd3a4"/><stop offset="1" stop-color="#cda173"/>
+    </linearGradient>
+    <radialGradient id="waterR" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#bfe9f7"/><stop offset="0.6" stop-color="#6fc3e6"/><stop offset="1" stop-color="#3f9fce"/>
+    </radialGradient>
+    <radialGradient id="glowR" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff9e0" stop-opacity="0.9"/><stop offset="1" stop-color="#fff9e0" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="fshadowR" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#3a2a1e" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="150" cy="324" rx="118" ry="16" fill="#2e2116" opacity="0.22"/>
+
+  <!-- soft glow behind the whole restored fountain -->
+  <ellipse cx="150" cy="170" rx="150" ry="150" fill="url(#glowR)"/>
+
+  <!-- base tier, clean warm stone + water -->
+  <g filter="url(#fshadowR)">
+    <ellipse cx="150" cy="288" rx="110" ry="34" fill="url(#stoneR)" stroke="#a97d53" stroke-width="3"/>
+    <ellipse cx="150" cy="280" rx="92" ry="24" fill="url(#waterR)"/>
+  </g>
+  <path d="M96,278 q54,16 108,0" stroke="#eaf8ff" stroke-width="3" fill="none" opacity="0.7"/>
+  <path d="M110,270 q40,10 80,0" stroke="#eaf8ff" stroke-width="2.4" fill="none" opacity="0.55"/>
+
+  <!-- pedestal, restored -->
+  <path d="M120,272 L180,272 L172,192 Q150,182 128,192 Z" fill="url(#stoneR2)" stroke="#a97d53" stroke-width="3"/>
+  <path d="M132,260 q18,10 36,0" stroke="#fff2d6" stroke-width="2" fill="none" opacity="0.5"/>
+
+  <!-- upper basin, full of water -->
+  <ellipse cx="150" cy="188" rx="58" ry="20" fill="url(#stoneR)" stroke="#a97d53" stroke-width="3"/>
+  <ellipse cx="150" cy="184" rx="46" ry="13" fill="url(#waterR)"/>
+  <path d="M112,182 q38,10 76,0" stroke="#eaf8ff" stroke-width="2.4" fill="none" opacity="0.7"/>
+
+  <!-- spout with flowing water streaks -->
+  <path d="M142,178 L158,178 L154,138 Q150,128 146,138 Z" fill="url(#stoneR2)" stroke="#a97d53" stroke-width="2"/>
+  <g stroke="#bfe9f7" stroke-width="3" fill="none" opacity="0.85" stroke-linecap="round">
+    <path d="M150,138 C150,150 146,158 150,178"/>
+    <path d="M144,140 C142,152 140,160 144,176"/>
+    <path d="M156,140 C158,152 160,160 156,176"/>
+  </g>
+
+  <!-- flowers blooming at the base -->
+  <g>
+    <g transform="translate(56,300)"><circle r="8" fill="#f3a9cf"/><circle r="3.4" fill="#ffe6a3"/></g>
+    <g transform="translate(244,296)"><circle r="8" fill="#b98be0"/><circle r="3.4" fill="#ffe6a3"/></g>
+    <g transform="translate(80,312)"><circle r="6" fill="#f5c24b"/><circle r="2.6" fill="#c9902f"/></g>
+    <g transform="translate(220,314)"><circle r="6" fill="#fef1f4"/><circle r="2.6" fill="#e58bb9"/></g>
+  </g>
+</svg>

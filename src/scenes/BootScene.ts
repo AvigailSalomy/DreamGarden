@@ -24,6 +24,12 @@ export class BootScene extends Phaser.Scene {
     }
 
     document.getElementById("boot")?.remove();
+
+    // isolated art-direction prototype — never part of the normal boot flow.
+    if (/(?:\?|&)slice\b/.test(location.search)) {
+      this.scene.start("VisualSlice");
+      return;
+    }
     this.scene.start("Preload");
   }
 }

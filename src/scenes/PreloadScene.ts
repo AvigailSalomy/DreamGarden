@@ -50,6 +50,7 @@ export class PreloadScene extends Phaser.Scene {
     // restorations + puzzle pictures
     svg("rabbit", 220, 250);
     svg("rabbit_portrait", 900, 900);
+    svg("fox", 220, 190); // Bunny Heist guard — no prior asset existed for this
     svg("bird", 150, 160);
     svg("bird_portrait", 900, 900);
     svg("wildflower_bed", 320, 320);

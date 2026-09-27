@@ -116,6 +116,7 @@ export class RequestsScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       (window as unknown as Record<string, unknown>).__dgRequests = {
         buy: (id: string) => this.buy(requestsService.def(this.objectId)!.requests.find((r) => r.id === id)!),
+        earnCoins: () => this.earnCoins(),
       };
     }
   }

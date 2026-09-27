@@ -10,6 +10,8 @@ import { UIScene } from "../scenes/UIScene";
 import { RequestsScene } from "../scenes/RequestsScene";
 import { LevelGoalsScene } from "../scenes/LevelGoalsScene";
 import { CarrotDashScene } from "../scenes/CarrotDashScene";
+import { BunnyHeistScene } from "../scenes/BunnyHeistScene";
+import { VisualSliceScene } from "../scenes/VisualSliceScene";
 
 export function startGame(): Phaser.Game {
   return new Phaser.Game({
@@ -37,7 +39,9 @@ export function startGame(): Phaser.Game {
       LetterScene, // on top of the HUD — the letter is a modal storybook beat
       RequestsScene,
       LevelGoalsScene,
-      CarrotDashScene,
+      CarrotDashScene, // kept registered but no longer launched — see BunnyHeistScene
+      BunnyHeistScene,
+      VisualSliceScene, // isolated art-direction prototype, reached only via ?slice (see BootScene)
     ],
   });
 }

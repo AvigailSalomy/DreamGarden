@@ -443,6 +443,23 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: this.card, y: this.cardRestY, duration: 380, ease: "Back.easeOut" });
   }
 
+  /** Fade the persistent HUD chrome (coin pill, gear) in/out — used by GardenScene's
+   *  entry zoom-reveal so the wide "look at this whole place" moment isn't cluttered. */
+  setHudVisible(visible: boolean, animate = true): void {
+    const targets = [this.coinPill, this.gear];
+    this.tweens.killTweensOf(targets);
+    if (!animate) {
+      targets.forEach((t) => t.setAlpha(visible ? 1 : 0));
+      return;
+    }
+    this.tweens.add({
+      targets,
+      alpha: visible ? 1 : 0,
+      duration: visible ? 320 : 220,
+      ease: "Sine.easeInOut",
+    });
+  }
+
   setRevealing(v: boolean): void {
     this.revealing = v;
     if (v) {

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="210" viewBox="0 0 240 210">
+  <defs>
+    <radialGradient id="leafBack" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#6fae5c"/><stop offset="1" stop-color="#457a3c"/>
+    </radialGradient>
+    <radialGradient id="leafMid" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#8fc77a"/><stop offset="1" stop-color="#5c9a4e"/>
+    </radialGradient>
+    <radialGradient id="leafFront" cx="0.35" cy="0.3" r="0.75">
+      <stop offset="0" stop-color="#a9dd8f"/><stop offset="1" stop-color="#74b862"/>
+    </radialGradient>
+    <filter id="soften"><feGaussianBlur stdDeviation="2.4"/></filter>
+  </defs>
+
+  <ellipse cx="120" cy="196" rx="88" ry="14" fill="#2e2116" opacity="0.22"/>
+
+  <!-- back clump: darkest, slightly blurred for depth falloff -->
+  <g filter="url(#soften)">
+    <ellipse cx="80" cy="120" rx="52" ry="46" fill="url(#leafBack)"/>
+    <ellipse cx="160" cy="110" rx="56" ry="48" fill="url(#leafBack)"/>
+  </g>
+
+  <!-- mid clumps -->
+  <ellipse cx="100" cy="132" rx="58" ry="50" fill="url(#leafMid)" stroke="#3f6e37" stroke-width="2" opacity="0.96"/>
+  <ellipse cx="150" cy="128" rx="54" ry="48" fill="url(#leafMid)" stroke="#3f6e37" stroke-width="2" opacity="0.96"/>
+
+  <!-- front highlight clumps, warm key light from upper-left -->
+  <ellipse cx="86" cy="118" rx="40" ry="34" fill="url(#leafFront)" opacity="0.9"/>
+  <ellipse cx="146" cy="112" rx="36" ry="30" fill="url(#leafFront)" opacity="0.85"/>
+  <path d="M60,150 q20,-14 34,2" stroke="#3f6e37" stroke-width="3" fill="none" opacity="0.4"/>
+
+  <!-- blossom clusters -->
+  <g>
+    <g transform="translate(76,96)"><circle r="9" fill="#f3a9cf"/><circle r="4" fill="#ffe6a3"/></g>
+    <g transform="translate(112,84)"><circle r="8" fill="#fef1f4"/><circle r="3.6" fill="#f5c24b"/></g>
+    <g transform="translate(150,92)"><circle r="9" fill="#f3a9cf"/><circle r="4" fill="#ffe6a3"/></g>
+    <g transform="translate(134,118)"><circle r="7" fill="#fef1f4"/><circle r="3" fill="#e58bb9"/></g>
+    <g transform="translate(96,140)"><circle r="6" fill="#f3a9cf"/><circle r="2.6" fill="#ffe6a3"/></g>
+  </g>
+</svg>

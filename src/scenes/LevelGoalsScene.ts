@@ -14,7 +14,7 @@ interface LevelGoalsInit {
 }
 
 /**
- * Shown before every Carrot Dash round: the level number and the coin reward.
+ * Shown before every Bunny Heist round: the level number and the coin reward.
  * Launched on top of a paused "Requests"; on Back it just closes back to
  * Requests (Requests was only paused, not stopped).
  */
@@ -59,11 +59,11 @@ export class LevelGoalsScene extends Phaser.Scene {
     let y = cy - panelH / 2 + 42;
     this.root.add(this.add.text(cx, y, `LEVEL ${levelDef.level}`, titleStyle(25)).setOrigin(0.5));
     y += 34;
-    this.root.add(this.add.text(cx, y, "CARROT DASH", labelStyle(17, "#7a6350")).setOrigin(0.5));
+    this.root.add(this.add.text(cx, y, "BUNNY HEIST", labelStyle(17, "#7a6350")).setOrigin(0.5));
     y += 26;
     this.root.add(
       this.add
-        .text(cx, y, "Dash the path ~30s — grab, dodge, keep the combo alive!", {
+        .text(cx, y, "Sneak in, grab loot, and reach the exit before a fox spots you!", {
           ...bodyStyle(14),
           align: "center",
           wordWrap: { width: panelW - 56 },
@@ -72,14 +72,14 @@ export class LevelGoalsScene extends Phaser.Scene {
     );
     y += 34;
 
-    // compact legend — the same six items the in-run strip shows
+    // compact legend — mirrors the same icons the heist itself uses
     const legend: Array<[string, string, number | undefined]> = [
       ["carrot", "Collect", undefined],
-      ["star_special", "Bonus", undefined],
+      ["star_special", "Rare", undefined],
       ["carrot", "Golden", 0xffcf3f],
-      ["rock", "Hit", undefined],
-      ["water_drop", "Slide", undefined],
-      ["weeds", "Slow", 0x6fae5c],
+      ["fox", "Fox = danger", undefined],
+      ["rock", "Break sight", undefined],
+      ["glow", "Exit = safe", 0xffe6a3],
     ];
     const cols = 3;
     const colW = Math.min((panelW - 40) / cols, 118);
@@ -118,13 +118,19 @@ export class LevelGoalsScene extends Phaser.Scene {
 
     this.root.setAlpha(0);
     this.tweens.add({ targets: this.root, alpha: 1, duration: 200 });
+
+    if (import.meta.env.DEV) {
+      (window as unknown as Record<string, unknown>).__dgLevelGoals = {
+        play: () => this.play(levelDef),
+      };
+    }
   }
 
   private play(levelDef: LevelDef): void {
     if (this.closing) return;
     this.closing = true;
     Sfx.tap();
-    this.scene.launch("CarrotDash", { objectId: this.objectId, level: levelDef });
+    this.scene.launch("BunnyHeist", { objectId: this.objectId, level: levelDef });
     this.scene.stop();
   }
 

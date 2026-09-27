@@ -88,6 +88,21 @@ class SfxEngine {
     this.blip(440, 0.05, { type: "sine", vol: 0.1 });
   }
 
+  /** Bunny Heist: a fox has just noticed something ("!"). */
+  alertPing(): void {
+    this.blip(760, 0.06, { type: "square", vol: 0.13, slideTo: 980 });
+    this.blip(760, 0.06, { type: "square", vol: 0.13, slideTo: 980, delay: 0.11 });
+  }
+  /** Bunny Heist: caught by a fox — short, not harsh. */
+  caughtThud(): void {
+    this.blip(220, 0.15, { type: "sine", vol: 0.22, slideTo: 80 });
+    this.blip(150, 0.18, { type: "triangle", vol: 0.16, slideTo: 60, delay: 0.05 });
+  }
+  /** Bunny Heist: safely escaped with the loot. */
+  escapeChime(): void {
+    [784, 988, 1318].forEach((f, i) => this.blip(f, 0.2, { type: "triangle", vol: 0.2, delay: i * 0.07 }));
+  }
+
   /* ---- object-specific puzzle-completion sounds (short, never looped) ---- */
 
   /** Rabbit: a soft two-note squeak — cute, tiny, not an animal recording. */

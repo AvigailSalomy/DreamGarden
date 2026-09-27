@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="340" viewBox="0 0 300 340">
+  <defs>
+    <linearGradient id="stoneD" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a8a196"/><stop offset="1" stop-color="#7d766c"/>
+    </linearGradient>
+    <linearGradient id="stoneD2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#948d82"/><stop offset="1" stop-color="#6b6459"/>
+    </linearGradient>
+    <filter id="fshadowD" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#2a221a" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="150" cy="324" rx="118" ry="16" fill="#2a221a" opacity="0.25"/>
+
+  <!-- base tier, cracked stone -->
+  <g filter="url(#fshadowD)">
+    <ellipse cx="150" cy="288" rx="110" ry="34" fill="url(#stoneD)" stroke="#5c574c" stroke-width="3"/>
+    <ellipse cx="150" cy="280" rx="92" ry="24" fill="#4a453c"/>
+  </g>
+  <!-- dry cracked basin floor -->
+  <ellipse cx="150" cy="280" rx="86" ry="20" fill="#3e3a33"/>
+  <g stroke="#2a271f" stroke-width="2" opacity="0.7" fill="none">
+    <path d="M100,278 q20,10 40,2"/><path d="M170,270 q22,8 44,-2"/><path d="M120,288 q10,-6 22,-2"/>
+  </g>
+
+  <!-- pedestal, chipped -->
+  <path d="M120,272 L180,272 L172,192 Q150,182 128,192 Z" fill="url(#stoneD2)" stroke="#5c574c" stroke-width="3"/>
+  <path d="M138,230 l6,-10 l-4,-8 l8,4" stroke="#4a453c" stroke-width="2" fill="none"/>
+
+  <!-- upper dry basin, no water -->
+  <ellipse cx="150" cy="188" rx="58" ry="20" fill="url(#stoneD)" stroke="#5c574c" stroke-width="3"/>
+  <ellipse cx="150" cy="184" rx="46" ry="13" fill="#403c34"/>
+
+  <!-- broken spout stub -->
+  <path d="M142,178 L158,178 L154,138 Q150,128 146,138 Z" fill="url(#stoneD2)" stroke="#5c574c" stroke-width="2"/>
+
+  <!-- cracks across the whole fountain -->
+  <g stroke="#3a352c" stroke-width="2.4" opacity="0.75" fill="none">
+    <path d="M110,260 q14,-30 8,-58"/>
+    <path d="M188,250 q-10,-26 4,-48"/>
+    <path d="M150,210 q6,-24 -2,-40"/>
+  </g>
+
+  <!-- dead weeds beside it -->
+  <g stroke="#7c6a54" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.85">
+    <path d="M46,300 C40,270 48,250 40,222"/>
+    <path d="M256,296 C264,268 254,248 264,220"/>
+  </g>
+</svg>
