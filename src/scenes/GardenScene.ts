@@ -14,6 +14,8 @@ import type { RevealHost } from "../reveal/types";
 import { ambientFireflies, sparkleBurst } from "../fx/Particles";
 import { Sfx } from "../fx/Sfx";
 import type { GardenObjectDef } from "../data/types";
+import { HABITATS } from "../data/habitats";
+import type { RestorationResource, ResourceRequirement } from "../data/habitats";
 import type { UIScene } from "./UIScene";
 
 /** Region rectangles (centre x/y + w/h) laid across the expanded world. */
@@ -129,6 +131,15 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       (window as unknown as Record<string, unknown>).__dgReveal = (objectId: string) => {
         const def = progression.def(objectId);
         return def ? this.reveal.play(def) : Promise.reject(new Error("unknown object"));
+      };
+      // drives the REAL completion path (progression.recordPuzzleCompletion,
+      // which commits the save, then the same "puzzle:closed" bus event the
+      // actual PuzzleScene emits) — for testing the full loop incl. persistence
+      // without needing to solve the tile-drag jigsaw headlessly.
+      (window as unknown as Record<string, unknown>).__dgCompletePuzzle = (objectId: string) => {
+        const { unlockedNow } = progression.recordPuzzleCompletion(objectId);
+        bus.emit("puzzle:closed", { objectId, solved: true, unlockedNow });
+        return unlockedNow;
       };
     }
   }
@@ -294,6 +305,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     await wait(this, 500);
     if (revealed.overview_text) this.toast(revealed.overview_text);
     this.refreshPond(true);
+    this.refreshHabitatResources(revealed.id);
     await wait(this, 1100);
 
     const next = progression.currentTask;
@@ -378,18 +390,16 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       }
     }
 
-    const blend = this.add.graphics().setDepth(-185);
-    blend.fillGradientStyle(
-      COLORS.grassDull,
-      COLORS.grassDull,
-      COLORS.grassDull,
-      COLORS.grassDull,
-      0,
-      0,
-      1,
-      1,
-    );
-    blend.fillRect(0, HORIZON - 110, WORLD_WIDTH, 150);
+    // Horizon-softening blend. NOTE: this used to be a single `Graphics` call
+    // to `fillGradientStyle` — that API is WebGL-only in Phaser and silently
+    // no-ops under the Canvas2D fallback renderer (confirmed earlier tracking
+    // down a real seam bug this exact way in VisualSliceScene). It sat at
+    // full WORLD_WIDTH right across the visible horizon, i.e. exactly the
+    // shape of a "large rectangular overlay" if it ever rendered as a flat
+    // fill instead of a fade. Baked into a texture instead — renders
+    // identically on both renderer paths.
+    this.bakeHorizonBlend();
+    this.add.image(0, HORIZON - 110, "dg_horizon_blend").setOrigin(0, 0).setDisplaySize(WORLD_WIDTH, 150).setDepth(-185);
 
     this.add
       .image(1560, WORLD_HEIGHT + 10, "path")
@@ -397,6 +407,22 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       .setScale(1.6)
       .setDepth(-120)
       .setAlpha(0.95);
+  }
+
+  /** Bakes the horizon-fade gradient into a small canvas texture once (see the
+   *  note at its call site for why — `Graphics.fillGradientStyle` is WebGL-only). */
+  private bakeHorizonBlend(): void {
+    const key = "dg_horizon_blend";
+    if (this.textures.exists(key)) return;
+    const tex = this.textures.createCanvas(key, 4, 150);
+    const ctx = tex!.getContext();
+    const hex = `#${COLORS.grassDull.toString(16).padStart(6, "0")}`;
+    const grad = ctx.createLinearGradient(0, 0, 0, 150);
+    grad.addColorStop(0, hex + "00");
+    grad.addColorStop(1, hex + "ff");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 4, 150);
+    tex!.refresh();
   }
 
   private prop(key: string, x: number, y: number, scale = 1, shadowW = 0): Phaser.GameObjects.Image {
@@ -432,7 +458,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       .setDepth(y);
     this.add
       .image(x, y + 3, "shadow")
-      .setDisplaySize(scale * 340, scale * 110)
+      .setDisplaySize(scale * 210, scale * 70)
       .setAlpha(0.3)
       .setDepth(y - 1);
     this.tweens.add({
@@ -544,6 +570,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private buildProps(): void {
     this.buildTrees();
     this.buildPaths();
+    this.buildHabitatResources();
 
     // ---- neglected landmark: Garden Heart (future) ----
     this.prop("heart_dormant", 1560, 980, 1.15, 150);
@@ -562,12 +589,8 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     ] as const)
       this.dprop("decor/fence_01", x, y, s); // yard boundary either side of the arch — not a wall
     this.dprop("structures/cottage_small_01", 1980, 1230, 0.44, 260); // its own clearing, not buried in trees
-    // the cottage lantern is unlit/dim until Pip comes home — a localized
-    // damage cue instead of a region-wide tint
-    const cottageLit = progression.isUnlocked("bird");
-    this.dprop("decor/lantern_01", 1860, 1280, 0.22)
-      .setTint(cottageLit ? 0xffffff : 0x50505c)
-      .setAlpha(cottageLit ? 1 : 0.8);
+    // cottageLantern + cottageDoorstepFlowers (BIRD_HABITAT resources) are
+    // built by buildHabitatResources() below — damaged/restored on Pip's unlock
     this.dprop("decor/flower_cart_01", 2080, 1310, 0.2, 150); // cart belongs to the cottage garden
     this.dprop("decor/birdhouse_01", 1260, 1180, 0.18); // near the perch/arch, where a bird would actually nest
     // bench faces the cottage clearing, not wedged against the fence
@@ -581,7 +604,8 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.dprop("nature/mushrooms_01", 700, 1650, 0.13);
     this.critter("animals/hedgehog", 660, 1610, 0.13); // rocks + bushes, per its actual habitat
     this.dprop("vegetation/fern_01", 500, 1660, 0.15);
-    this.dprop("vegetation/flowers_yellow_01", 1140, 1580, 0.19);
+    // meadowBloom (RABBIT_HABITAT resource) is built by buildHabitatResources()
+    // below — absent/dormant until Nibs is rescued, then blooms in
     this.dprop("vegetation/bush_green_01", 1220, 1500, 0.19);
 
     // ---- flower bed — the dormant/damaged area, right by the entrance ----
@@ -590,8 +614,9 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // ground AROUND it. Restored/unrestored flower art frames the same spot the
     // planter already occupies, so its own bloom animation still reads as the hero
     // moment rather than being upstaged by a duplicate bed.
-    const wildflowersDone = progression.isUnlocked("wildflowers");
-    this.dprop(wildflowersDone ? "vegetation/vegetation_01" : "vegetation/vegetation_04", 260, 1560, 0.22);
+    // flowerBedGrowth (WILDFLOWER_HABITAT resource) is built by
+    // buildHabitatResources() below — dead vegetation_04 until restored, then
+    // the real vegetation_01 bloom
     this.dprop("vegetation/flowers_pink_01", 300, 1520, 0.18);
     this.dprop("nature/rock_small_01", 690, 1660, 0.16, 120);
     this.dprop("decor/sign_01", 200, 1520, 0.16); // marks the meadow/flowerbed path junction
@@ -737,6 +762,83 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     if (allDone) sparkleBurst(this, this.pondRestored.x, this.pondRestored.y - 80, 20, 80);
   }
 
+  /* ---------------- habitat restoration resources (data/habitats.ts) ---------------- */
+
+  private resourceViews = new Map<string, Phaser.GameObjects.Image>();
+  private resourceMeta = new Map<string, RestorationResource>();
+
+  private isRequirementMet(req: ResourceRequirement): boolean {
+    switch (req.kind) {
+      case "objectUnlocked":
+        return progression.isUnlocked(req.objectId);
+      case "requestPurchased":
+        return requests.purchasedIds(req.objectId).has(req.requestId);
+      case "allUnlocked":
+        return progression.unlockedObjects().length >= CATALOG.length;
+    }
+  }
+
+  /** Builds every habitat resource except the fountain's (buildPond already
+   *  owns that one — it predates this data table and works, so it's left as
+   *  the special case rather than risking a regression to re-derive it). */
+  private buildHabitatResources(): void {
+    for (const habitat of HABITATS) {
+      if (habitat.id === "fountainClearing") continue;
+      for (const res of habitat.resources) this.buildResource(res);
+    }
+  }
+
+  private buildResource(res: RestorationResource): void {
+    const met = this.isRequirementMet(res.requirement);
+    const { x, y } = res.position;
+
+    if (res.tintOnly) {
+      const img = this.dprop(`decor/${res.restoredAsset}`, x, y, res.scale, res.shadowW ?? 0);
+      img.setTint(met ? 0xffffff : 0x50505c).setAlpha(met ? 1 : 0.8);
+      this.resourceViews.set(res.id, img);
+      this.resourceMeta.set(res.id, res);
+      return;
+    }
+
+    if (met) {
+      const img = this.dprop(`vegetation/${res.restoredAsset}`, x, y, res.scale, res.shadowW ?? 0);
+      this.resourceViews.set(res.id, img);
+    } else if (res.damagedAsset) {
+      const img = this.dprop(`vegetation/${res.damagedAsset}`, x, y, res.scale, res.shadowW ?? 0);
+      this.resourceViews.set(res.id, img);
+    }
+    // else: damaged state = absence — nothing rendered until the requirement is met
+    this.resourceMeta.set(res.id, res);
+  }
+
+  /** Live-swap every resource this newly-unlocked object owns — called from
+   *  runPostStage alongside refreshPond, so a resource blooms in during the
+   *  SAME session it's unlocked, not only after a reload. */
+  private refreshHabitatResources(objectId: string): void {
+    for (const habitat of HABITATS) {
+      if (habitat.animalId !== objectId) continue;
+      for (const res of habitat.resources) {
+        if (res.requirement.kind !== "objectUnlocked" || res.requirement.objectId !== objectId) continue;
+        const existing = this.resourceViews.get(res.id);
+        const { x, y } = res.position;
+
+        if (res.tintOnly && existing) {
+          this.tweens.add({ targets: existing, alpha: 1, duration: 600, ease: "Sine.easeOut" });
+          existing.setTint(0xffffff);
+          sparkleBurst(this, x, y - 40, 12, 40);
+          continue;
+        }
+
+        if (existing) this.tweens.add({ targets: existing, alpha: 0, duration: 400, onComplete: () => existing.destroy() });
+        const img = this.dprop(`vegetation/${res.restoredAsset}`, x, y, res.scale, res.shadowW ?? 0);
+        img.setScale(0).setAlpha(0);
+        this.tweens.add({ targets: img, scale: res.scale, alpha: 1, duration: 500, delay: 150, ease: "Back.easeOut" });
+        this.resourceViews.set(res.id, img);
+        sparkleBurst(this, x, y - 30, 14, 44);
+      }
+    }
+  }
+
   private buildRegions(): void {
     const unlockedRegions = new Set(progression.unlockedObjects().map((o) => o.region));
 
@@ -870,7 +972,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       view = new GardenObjectView(this, def.garden_position.x, def.garden_position.y, {
         texture: def.garden_sprite,
         scale: def.garden_scale,
-        shadowWidth: def.category === "plant" ? 200 : def.category === "animal" ? 140 : 160,
+        // a soft contact shadow, not a second silhouette of the animal — sized
+        // well below the production art's own footprint (was 140/200/160,
+        // tuned for the old, smaller flat-SVG bodies)
+        shadowWidth: def.category === "plant" ? 130 : def.category === "animal" ? 80 : 110,
       });
       this.views.set(def.id, view);
     }
