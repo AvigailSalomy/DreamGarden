@@ -75,6 +75,22 @@ export class MenuScene extends Phaser.Scene {
       { hitW: 56, hitH: 56 },
     );
 
+    // Shop — an isolated feature (see src/shop/); launched as an overlay, Menu
+    // stays underneath so the "‹" back button in ShopScene just stops it.
+    makeIconButton(
+      this,
+      inset.left + 30,
+      inset.top + 32,
+      "🛍️",
+      28,
+      () => {
+        Sfx.unlock();
+        Sfx.tap();
+        this.scene.launch("Shop");
+      },
+      { hitW: 56, hitH: 56 },
+    );
+
     this.scale.on(Phaser.Scale.Events.RESIZE, this.relayout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       this.scale.off(Phaser.Scale.Events.RESIZE, this.relayout, this),

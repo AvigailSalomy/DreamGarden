@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="220" viewBox="0 0 180 220">
+  <defs>
+    <radialGradient id="mtglow" cx="0.5" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#c9b8e8" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#2a2036" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="90" cy="210" rx="66" ry="8" fill="#46323c" opacity="0.15"/>
+  <circle cx="90" cy="90" r="88" fill="url(#mtglow)"/>
+  <rect x="78" y="120" width="24" height="90" fill="#4f2b78"/>
+  <circle cx="90" cy="90" r="66" fill="#2a2036" opacity="0.9"/>
+  <circle cx="90" cy="90" r="34" fill="#fffdf5" opacity="0.9"/>
+  <circle cx="102" cy="80" r="28" fill="#2a2036" opacity="0.9"/>
+  <g fill="#fffdf5">
+    <circle cx="40" cy="60" r="3"/>
+    <circle cx="140" cy="70" r="2.5"/>
+    <circle cx="60" cy="130" r="2.5"/>
+    <circle cx="130" cy="130" r="3"/>
+    <path d="M55,40 l2,5 l5,1 l-4,4 l1,5 l-4,-3 l-4,3 l1,-5 l-4,-4 l5,-1 Z"/>
+  </g>
+</svg>
