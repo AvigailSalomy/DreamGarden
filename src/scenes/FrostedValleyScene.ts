@@ -90,27 +90,37 @@ const NATIVE_H: Record<string, number> = {
   fv_fountain_damaged: 615,
   fv_fountain_restored: 821,
   fv_dead_tree: 652,
-  fv_item_well_damaged: 1305,
-  fv_item_well_restored: 1147,
-  fv_item_carrots_damaged: 1147,
-  fv_item_carrots_restored: 1374,
-  fv_item_signpost_damaged: 1263,
-  fv_item_signpost_restored: 849,
-  fv_item_lantern_damaged: 1464,
-  fv_item_lantern_restored: 1142,
-  fv_item_pool_damaged: 1056,
-  fv_item_pool_restored: 1344,
-  fv_item_nest_damaged: 1004,
-  fv_item_nest_restored: 1313,
-  fv_item_moonpetal_restored: 844,
-  fv_item_crystal_damaged: 1003,
-  fv_item_crystal_restored: 1056,
-  fv_item_icecave_damaged: 1468,
-  fv_item_icecave_restored: 1372,
-  fv_item_fishhole_damaged: 1051,
-  fv_item_fishhole_restored: 976,
-  fv_item_igloo_damaged: 1065,
-  fv_item_igloo_restored: 1330,
+  // neglected-landmark pairs, one per animal request, user-verified damaged/restored
+  fv_rabbit_carrots_damaged: 1147,
+  fv_rabbit_carrots_restored: 1147,
+  fv_rabbit_well_damaged: 1305,
+  fv_rabbit_well_restored: 1305,
+  fv_rabbit_chime_damaged: 1377,
+  fv_rabbit_chime_restored: 1373,
+  fv_fox_ice_damaged: 1051,
+  fv_fox_ice_restored: 1142,
+  fv_fox_signpost_damaged: 1263,
+  fv_fox_signpost_restored: 1263,
+  fv_deer_flower_damaged: 849,
+  fv_deer_flower_restored: 844,
+  fv_squirrel_waterfall_damaged: 1372,
+  fv_squirrel_waterfall_restored: 1368,
+  fv_squirrel_pool_damaged: 1147,
+  fv_squirrel_pool_restored: 1144,
+  fv_squirrel_nest_damaged: 1329,
+  fv_squirrel_nest_restored: 1313,
+  fv_bear_crystal_damaged: 1056,
+  fv_bear_crystal_restored: 1056,
+  fv_bear_hole_damaged: 1043,
+  fv_bear_hole_restored: 1344,
+  fv_bear_cave_damaged: 1330,
+  fv_bear_cave_restored: 1330,
+  fv_penguin_iceberg_damaged: 1003,
+  fv_penguin_iceberg_restored: 1004,
+  fv_penguin_igloo_damaged: 1065,
+  fv_penguin_igloo_restored: 1103,
+  fv_penguin_slide_damaged: 1122,
+  fv_penguin_slide_restored: 1374,
 };
 
 const FV_KEYS = [...Object.keys(NATIVE_H), "fv_sparkle_trail"];
@@ -148,6 +158,8 @@ export class FrostedValleyScene extends Phaser.Scene {
   private tourSkipped = false;
   private idleTargets: Phaser.GameObjects.Image[] = [];
   private locked = false;
+  private hiddenAnimals: Array<{ x: number; y: number; radius: number; hint: string; revealed: boolean }> = [];
+  private hintBusy = false;
 
   constructor() {
     super("FrostedValley");
@@ -169,6 +181,8 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.flowBusy = false;
     this.tourSkipped = false;
     this.idleTargets = [];
+    this.hiddenAnimals = [];
+    this.hintBusy = false;
 
     this.buildSky();
     this.buildGround();
@@ -535,9 +549,10 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.propH("fv_hedge", z.x + 1000, z.y + 320, 200);
     this.propH("fv_snowrock_a", z.x + 1500, z.y - 100, 220);
 
-    // the neglected village landmark — a frozen carrot patch, restored once the rabbit's puzzle is solved
-    this.propH("fv_item_well_damaged", z.x - 780, z.y - 100, 400);
-    this.propH("fv_item_carrots_damaged", z.x + 560, z.y + 300, 260);
+    // the rabbit's three neglected requests, grouped around its hidden spot
+    this.propH("fv_rabbit_well_damaged", z.x + 50, z.y + 260, 380);
+    this.propH("fv_rabbit_carrots_damaged", z.x + 520, z.y + 320, 260);
+    this.propH("fv_rabbit_chime_damaged", z.x + 380, z.y - 20, 300);
   }
 
   /* ================= ZONE B: Bridge / River crossing ================= */
@@ -553,9 +568,9 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.propH("fv_flower_cluster_a", z.x - 260, z.y + 280, 170);
     this.propH("fv_snowrock_b", z.x + 300, z.y + 340, 210);
 
-    // the neglected bridge landmarks — a broken lantern and blank signpost
-    this.propH("fv_item_lantern_damaged", z.x + 140, z.y - 120, 260);
-    this.propH("fv_item_signpost_damaged", z.x + 700, z.y + 180, 300);
+    // the fox's two neglected requests, grouped around its hidden spot
+    this.propH("fv_fox_ice_damaged", z.x - 260, z.y + 280, 240);
+    this.propH("fv_fox_signpost_damaged", z.x + 260, z.y + 240, 300);
   }
 
   /* ================= ZONE C: Restoration Grove ================= */
@@ -579,8 +594,8 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.propH("fv_crystal_flowers", z.x + 300, z.y + 320, 260);
     this.propH("fv_hedge", z.x - 1000, z.y + 220, 200);
 
-    // the deer's neglected landmark — a wilted moonpetal patch
-    this.propH("fv_item_moonpetal_restored", z.x + 900, z.y + 280, 200, { tint: 0x8a90a0 });
+    // the deer's neglected request, right next to its hidden spot
+    this.propH("fv_deer_flower_damaged", z.x - 460, z.y + 340, 200);
   }
 
   /* ================= ZONE D: Frozen Waterfall ================= */
@@ -593,12 +608,14 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.propH("fv_riverbank", z.x - 120, z.y + 220, 380);
     this.propH("fv_pine", z.x + 540, z.y - 200, 520);
     this.propH("fv_pine_d", z.x - 620, z.y - 100, 560);
-    this.propH("fv_flower_bush", z.x + 400, z.y + 90, 190);
-    this.propH("fv_snowrock_a", z.x + 1000, z.y + 80, 230);
+    // grouped around the smaller cascade's base, not floating loose in open snow
+    this.propH("fv_flower_bush", z.x + 560, z.y + 300, 190);
+    this.propH("fv_snowrock_a", z.x + 840, z.y + 330, 230);
 
-    // the squirrel's neglected landmarks — an empty nest and a frozen rock pool
-    this.propH("fv_item_nest_damaged", z.x - 960, z.y + 340, 420);
-    this.propH("fv_pond_frozen", z.x - 780, z.y + 560, 220);
+    // the squirrel's three neglected requests, grouped around its hidden spot
+    this.propH("fv_squirrel_nest_damaged", z.x - 700, z.y + 460, 460);
+    this.propH("fv_squirrel_pool_damaged", z.x - 340, z.y + 560, 230);
+    this.propH("fv_squirrel_waterfall_damaged", z.x - 620, z.y + 60, 420);
   }
 
   /* ================= ZONE E: Crystal Area ================= */
@@ -615,10 +632,10 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.propH("fv_ice_gazebo", z.x + 880, z.y - 60, 480);
     this.propH("fv_snowrock_b", z.x + 180, z.y + 380, 220);
 
-    // the polar bear's neglected landmarks — a dull crystal and a dark cave mouth
-    this.propH("fv_item_crystal_damaged", z.x - 900, z.y + 320, 350);
-    this.propH("fv_item_icecave_damaged", z.x + 400, z.y + 460, 500);
-    this.propH("fv_item_fishhole_damaged", z.x - 200, z.y + 420, 200);
+    // the polar bear's three neglected requests, grouped around its hidden spot
+    this.propH("fv_bear_crystal_damaged", z.x - 640, z.y + 60, 340);
+    this.propH("fv_bear_hole_damaged", z.x - 340, z.y + 380, 200);
+    this.propH("fv_bear_cave_damaged", z.x - 780, z.y + 420, 460);
   }
 
   /* ================= ZONE F: Frozen Shore ================= */
@@ -632,20 +649,93 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.propH("fv_snowrock_a", z.x + 380, z.y + 260, 220);
     this.propH("fv_snowrock_b", z.x - 460, z.y + 300, 210);
 
-    // the penguin's neglected landmark — a collapsed igloo
-    this.propH("fv_item_igloo_damaged", z.x + 560, z.y + 60, 420);
+    // the penguin's three neglected requests, grouped around its hidden spot
+    this.propH("fv_penguin_igloo_damaged", z.x + 340, z.y + 200, 360);
+    this.propH("fv_penguin_iceberg_damaged", z.x - 320, z.y + 60, 280);
+    this.propH("fv_penguin_slide_damaged", z.x + 20, z.y - 220, 460);
   }
 
-  /* ================= animals — open, readable ground ================= */
+  /* ================= animals — hidden as silhouettes until their puzzle is solved ================= */
 
   private buildAnimals(): void {
-    const rabbit = this.propH("fv_rabbit", ZONES.village.x + 260, ZONES.village.y + 190, 220);
-    const fox = this.propH("fv_fox", ZONES.bridge.x - 80, ZONES.bridge.y + 180, 210);
-    const squirrel = this.propH("fv_squirrel", ZONES.waterfall.x - 320, ZONES.waterfall.y + 280, 190, { flip: true });
-    const deer = this.propH("fv_deer", ZONES.grove.x - 200, ZONES.grove.y + 280, 230);
-    const polarbear = this.propH("fv_polarbear", ZONES.crystals.x - 350, ZONES.crystals.y + 230, 210, { flip: true });
-    const penguin = this.propH("fv_penguin", ZONES.shore.x, ZONES.shore.y + 180, 210);
-    this.idleTargets.push(rabbit, fox, squirrel, deer, polarbear, penguin);
+    this.buildHiddenAnimal("fv_rabbit", ZONES.village.x + 260, ZONES.village.y + 190, 220, "Solve the Village puzzle to meet me!");
+    this.buildHiddenAnimal("fv_fox", ZONES.bridge.x - 80, ZONES.bridge.y + 180, 210, "Solve the Bridge puzzle to meet me!");
+    this.buildHiddenAnimal("fv_squirrel", ZONES.waterfall.x - 320, ZONES.waterfall.y + 280, 190, "Solve the Waterfall puzzle to meet me!", { flip: true });
+    this.buildHiddenAnimal("fv_deer", ZONES.grove.x - 200, ZONES.grove.y + 280, 230, "Solve the Grove puzzle to meet me!");
+    this.buildHiddenAnimal("fv_polarbear", ZONES.crystals.x - 350, ZONES.crystals.y + 230, 210, "Solve the Crystal puzzle to meet me!", { flip: true });
+    this.buildHiddenAnimal("fv_penguin", ZONES.shore.x, ZONES.shore.y + 180, 210, "Solve the Shore puzzle to meet me!");
+  }
+
+  /**
+   * A not-yet-unlocked animal: rendered as a solid black silhouette with a "?"
+   * badge, matching the main Garden's own locked-animal presentation. Tapping
+   * it shows a short hint instead of doing nothing — the actual puzzle/unlock
+   * mechanic doesn't exist yet, so this is the honest placeholder for it.
+   */
+  private buildHiddenAnimal(
+    key: string,
+    x: number,
+    y: number,
+    targetHeight: number,
+    hint: string,
+    opts: { flip?: boolean } = {},
+  ): void {
+    const sprite = this.propH(key, x, y, targetHeight, { flip: opts.flip });
+    sprite.setTintFill(0x0c0c14);
+    this.idleTargets.push(sprite);
+
+    this.add
+      .text(x, y - targetHeight - 18, "?", {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "20px",
+        fontStyle: "700",
+        color: "#fef6e8",
+        backgroundColor: "#1c1a2e",
+        padding: { x: 8, y: 4 },
+      })
+      .setOrigin(0.5)
+      .setDepth(sprite.depth + 1);
+
+    this.hiddenAnimals.push({ x, y, radius: Math.max(160, targetHeight), hint, revealed: false });
+  }
+
+  /** A brief floating hint bubble above a tapped-but-locked animal. */
+  private showHint(x: number, y: number, message: string): void {
+    if (this.hintBusy) return;
+    this.hintBusy = true;
+    const bubble = this.add
+      .text(x, y - 40, `🔒 ${message}`, {
+        fontFamily: "system-ui, sans-serif",
+        fontSize: "17px",
+        color: "#2a2038",
+        backgroundColor: "#fef6e8",
+        padding: { x: 14, y: 8 },
+        align: "center",
+        wordWrap: { width: 260 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(9800)
+      .setAlpha(0);
+    this.tweens.add({
+      targets: bubble,
+      alpha: 1,
+      y: y - 60,
+      duration: 220,
+      ease: "Sine.easeOut",
+      onComplete: () => {
+        this.time.delayedCall(1300, () => {
+          this.tweens.add({
+            targets: bubble,
+            alpha: 0,
+            duration: 260,
+            onComplete: () => {
+              bubble.destroy();
+              this.hintBusy = false;
+            },
+          });
+        });
+      },
+    });
   }
 
   private buildForeground(): void {
@@ -713,6 +803,16 @@ export class FrostedValleyScene extends Phaser.Scene {
   private handleTap(x: number, y: number): void {
     if (this.flowBusy || this.restoring) return;
     Sfx.unlock();
+
+    for (const a of this.hiddenAnimals) {
+      if (a.revealed) continue;
+      if (Phaser.Math.Distance.Between(x, y, a.x, a.y - a.radius / 2) < a.radius) {
+        Sfx.tap();
+        this.showHint(a.x, a.y, a.hint);
+        return;
+      }
+    }
+
     const d = Phaser.Math.Distance.Between(x, y, ZONES.grove.x, ZONES.grove.y - 40);
     if (d < 260 && !this.restored) this.triggerFountainRestore();
   }
