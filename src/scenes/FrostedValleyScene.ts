@@ -215,6 +215,7 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.buildRiver();
     this.buildAtmosphere();
     this.buildForestFringe();
+    this.buildDenseForest();
     this.buildVillageZone();
     this.buildBridgeZone();
     this.buildRestorationGrove();
@@ -649,6 +650,69 @@ export class FrostedValleyScene extends Phaser.Scene {
         alpha: 0.85,
         scroll: 0.94,
       });
+    }
+  }
+
+  /**
+   * Fills the open ground between zones with trees and rocks so the world
+   * reads as one continuous forest rather than clearings on an empty field —
+   * skips each zone's own clearing and a corridor around the path/river so
+   * the route through the valley stays clean and walkable.
+   */
+  private buildDenseForest(): void {
+    const zoneList = Object.values(ZONES);
+    const clearingRadius: Record<ZoneKey, number> = {
+      village: 1150,
+      bridge: 820,
+      grove: 1050,
+      waterfall: 1050,
+      crystals: 1050,
+      shore: 850,
+    };
+    const corridor = this.chain(
+      [ZONES.village, ZONES.bridge, ZONES.grove, ZONES.waterfall, ZONES.crystals],
+      14,
+    ).concat(this.chain([ZONES.village, ZONES.shore], 10));
+    const corridorWidth = 210;
+
+    // small deterministic PRNG so the forest layout is stable across reloads
+    let seed = 1337;
+    const rand = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+
+    const variants = ["fv_pine", "fv_pine_b", "fv_pine_c", "fv_pine_d"];
+    const cell = 300;
+    for (let gy = HORIZON + 200; gy < WORLD_H - 120; gy += cell) {
+      for (let gx = 0; gx < WORLD_W; gx += cell) {
+        const x = gx + rand() * cell;
+        const y = gy + rand() * cell;
+
+        const inZone = (Object.keys(ZONES) as ZoneKey[]).some((key, i) => {
+          const z = zoneList[i];
+          return Phaser.Math.Distance.Between(x, y, z.x, z.y) < clearingRadius[key];
+        });
+        if (inZone) continue;
+
+        const nearCorridor = corridor.some((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) < corridorWidth);
+        if (nearCorridor) continue;
+
+        if (rand() < 0.32) continue; // keep some genuine open snow, not wall-to-wall trees
+
+        const roll = rand();
+        if (roll < 0.08) {
+          this.propH(rand() < 0.5 ? "fv_snowrock_a" : "fv_snowrock_b", x, y, 200 + rand() * 90);
+        } else if (roll < 0.14) {
+          this.propH("fv_blossom_tree", x, y, 420 + rand() * 140);
+        } else if (roll < 0.2) {
+          this.propH("fv_dead_tree", x, y, 380 + rand() * 160, { alpha: 0.92 });
+        } else {
+          const h = 420 + rand() * 340;
+          const tree = this.propH(variants[Math.floor(rand() * variants.length)], x, y, h);
+          this.treeSwayTargets.push(tree);
+        }
+      }
     }
   }
 
