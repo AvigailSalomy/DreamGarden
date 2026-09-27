@@ -128,18 +128,28 @@ const NATIVE_H: Record<string, number> = {
 
 const FV_KEYS = [...Object.keys(NATIVE_H), "fv_sparkle_trail", "fv_star_sparkle", "fv_glow_orb"];
 
-const WORLD_W = 6000;
-const WORLD_H = 5500;
+const WORLD_W = 7200;
+const WORLD_H = 5900;
 const HORIZON = 350;
+
+/**
+ * Every zone sits at least ~900px in from every world edge (see the audit
+ * that found fv_flower_arch sitting at x < 0 — the camera's bounds are a
+ * hard [0,0]..[WORLD_W,WORLD_H] rect, so any prop past that edge could never
+ * be panned into full view, which read as "panning stops short"). Zone
+ * anchors carry a fixed offset from their original values so every prop
+ * placed relative to `z.x`/`z.y` gets the same safety margin for free.
+ */
+const ZONE_OFFSET_X = 900;
 
 /** Six distinct clearings, spaced well apart — the world's real structure. */
 const ZONES: Record<ZoneKey, { x: number; y: number }> = {
-  village: { x: 900, y: 4300 },
-  bridge: { x: 2150, y: 3500 },
-  grove: { x: 2950, y: 2600 },
-  waterfall: { x: 4150, y: 1500 },
-  crystals: { x: 4950, y: 850 },
-  shore: { x: 2750, y: 5250 },
+  village: { x: 900 + ZONE_OFFSET_X, y: 4300 },
+  bridge: { x: 2150 + ZONE_OFFSET_X, y: 3500 },
+  grove: { x: 2950 + ZONE_OFFSET_X, y: 2600 },
+  waterfall: { x: 4150 + ZONE_OFFSET_X, y: 1500 },
+  crystals: { x: 4950 + ZONE_OFFSET_X, y: 850 },
+  shore: { x: 2750 + ZONE_OFFSET_X, y: 5250 },
 };
 
 const START_FOCUS = { x: ZONES.village.x, y: ZONES.village.y - 90 };
@@ -475,7 +485,18 @@ export class FrostedValleyScene extends Phaser.Scene {
     const cross = { x: ZONES.bridge.x + 40, y: ZONES.bridge.y - 20 };
     const tail = { x: ZONES.bridge.x - 340, y: ZONES.bridge.y + 560 };
     const mouth = { x: ZONES.shore.x + 260, y: ZONES.shore.y - 180 };
-    const pts = this.chain([src, mid, cross, tail, mouth], 7);
+    const rawPts = this.chain([src, mid, cross, tail, mouth], 9);
+    // a gentle perpendicular wobble along the route so the river snakes
+    // naturally rather than running as dead-straight segments between anchors
+    const pts = rawPts.map((p, i) => {
+      const prev = rawPts[Math.max(0, i - 1)];
+      const next = rawPts[Math.min(rawPts.length - 1, i + 1)];
+      const dx = next.x - prev.x;
+      const dy = next.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const wobble = Math.sin(i * 0.55) * 70;
+      return { x: p.x + (-dy / len) * wobble, y: p.y + (dx / len) * wobble };
+    });
     for (const p of pts) river.fillEllipse(p.x, p.y, 230, 140);
 
     const shimmer = this.add.graphics().setDepth(-138);
@@ -513,11 +534,11 @@ export class FrostedValleyScene extends Phaser.Scene {
     const cracks = this.add.graphics().setDepth(-145);
     cracks.lineStyle(4, 0x9fc2dc, 0.55);
     const crackOrigins = [
-      { x: 1550, y: 3950 },
-      { x: 2600, y: 3050 },
-      { x: 3600, y: 2000 },
-      { x: 4550, y: 1150 },
-      { x: 1450, y: 4650 },
+      { x: 1550 + ZONE_OFFSET_X, y: 3950 },
+      { x: 2600 + ZONE_OFFSET_X, y: 3050 },
+      { x: 3600 + ZONE_OFFSET_X, y: 2000 },
+      { x: 4550 + ZONE_OFFSET_X, y: 1150 },
+      { x: 1450 + ZONE_OFFSET_X, y: 4650 },
     ];
     for (const o of crackOrigins) this.drawCrack(cracks, o.x, o.y, 5, 110);
 
@@ -642,8 +663,10 @@ export class FrostedValleyScene extends Phaser.Scene {
   /** Distant hazy treeline along the world's back edge, for depth — mixed pine variants for texture. */
   private buildForestFringe(): void {
     const variants = ["fv_pine", "fv_pine_b", "fv_pine_c", "fv_pine_d"];
-    for (let i = 0; i < 22; i++) {
-      const x = 80 + i * 280 + (i % 2) * 70;
+    const count = 26;
+    const step = WORLD_W / count;
+    for (let i = 0; i < count; i++) {
+      const x = step * 0.3 + i * step + (i % 2) * (step * 0.25);
       this.propH(variants[i % variants.length], x, HORIZON + 60 + (i % 3) * 20, 340 + (i % 2) * 60, {
         depth: -160,
         tint: 0xb9cfe8,
@@ -695,8 +718,21 @@ export class FrostedValleyScene extends Phaser.Scene {
         });
         if (inZone) continue;
 
-        const nearCorridor = corridor.some((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) < corridorWidth);
-        if (nearCorridor) continue;
+        let distToCorridor = Infinity;
+        for (const p of corridor) {
+          const d = Phaser.Math.Distance.Between(x, y, p.x, p.y);
+          if (d < distToCorridor) distToCorridor = d;
+        }
+        if (distToCorridor < corridorWidth) continue;
+
+        // a wayside micro-detail just off the path, instead of a tree
+        if (distToCorridor < corridorWidth + 180 && rand() < 0.14) {
+          const pick = rand();
+          if (pick < 0.4) this.propH("fv_bench", x, y, 190);
+          else if (pick < 0.7) this.propH("fv_signpost", x, y, 300);
+          else this.propH("fv_wheelbarrow", x, y, 210);
+          continue;
+        }
 
         if (rand() < 0.32) continue; // keep some genuine open snow, not wall-to-wall trees
 
