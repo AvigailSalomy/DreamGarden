@@ -62,3 +62,6 @@ tmp/
 # original ungrouped Gemini exports, not meant to ship.
 Game_Assets_frozen_world_Compressed/
 src/Game_Assets_frozen_world_Compressed/
+/Gemini_Generated_Image_*.jpeg
+/*.lnk
+tests/animals request/
