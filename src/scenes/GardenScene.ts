@@ -6,7 +6,7 @@ import { bus, progression, requests, save } from "../game/services";
 import { CATALOG } from "../data/objects";
 import { CameraController } from "../world/CameraController";
 import { GardenObjectView } from "../world/GardenObjectView";
-import { RegionOverlay, addDormantVeil } from "../world/RegionOverlay";
+import { RegionOverlay } from "../world/RegionOverlay";
 import type { RegionRect } from "../world/RegionOverlay";
 import { IdleBehavior } from "../behavior/IdleBehavior";
 import { RevealSequencer } from "../reveal/RevealSequencer";
@@ -354,10 +354,25 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     g.fillStyle(COLORS.grassDull, 1);
     g.fillRect(0, HORIZON - 4, WORLD_WIDTH, WORLD_HEIGHT - HORIZON + 4);
 
-    this.add
-      .tileSprite(0, HORIZON, WORLD_WIDTH, WORLD_HEIGHT - HORIZON, "grass_tile")
-      .setOrigin(0, 0)
-      .setDepth(-190);
+    // The supplied painted ground reference as the actual terrain, not a flat
+    // fill or a re-drawn SVG. It doesn't tile perfectly seamlessly on its own
+    // (checked: ~20/255 edge mismatch), so it's laid as a small grid of large
+    // panels with alternating mirror flips — the standard trick for hiding a
+    // texture's seams (a flipped repeat reads as a continuation, not a jump-cut)
+    // — and every seam additionally falls under a prop cluster from buildProps().
+    const tileW = 1650;
+    const tileH = 1100;
+    for (let row = 0; row * tileH < WORLD_HEIGHT - HORIZON + tileH; row++) {
+      for (let col = 0; col * tileW < WORLD_WIDTH; col++) {
+        this.add
+          .image(col * tileW, HORIZON + row * tileH, "dg_grass_ground")
+          .setOrigin(0, 0)
+          .setDisplaySize(tileW, tileH)
+          .setFlipX(col % 2 === 1)
+          .setFlipY(row % 2 === 1)
+          .setDepth(-195);
+      }
+    }
 
     const blend = this.add.graphics().setDepth(-185);
     blend.fillGradientStyle(
@@ -524,8 +539,16 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // ---- archway + cottage-yard fence (the songbird perch) ----
     // flower_arch_01 replaces the old bare wooden arch — same spot/role, dressed.
     this.dprop("vegetation/flower_arch_01", 1560, 1170, 0.62);
-    for (let i = 0; i < 6; i++) this.dprop("decor/fence_01", 1150 + i * 300, 1290 + (i % 2) * 6, 0.34);
-    for (let i = 0; i < 3; i++) this.dprop("decor/fence_01", 2560 + i * 20, 1180 - i * 150, 0.28);
+    // a shorter, gapped fence run either side of the arch (not an unbroken wall
+    // of identical repeats) — a real split-rail fence reads as a boundary marker
+    // with openings, not a solid mechanical row.
+    for (const [x, y, s] of [
+      [1180, 1288, 0.32],
+      [1480, 1300, 0.34],
+      [1660, 1280, 0.3],
+      [1940, 1120, 0.26],
+    ] as const)
+      this.dprop("decor/fence_01", x, y, s);
     // a cosy cottage tucked behind the fence line — new, purely decorative depth
     this.dprop("structures/cottage_small_01", 1980, 1230, 0.42, 260);
     this.dprop("decor/lantern_01", 1700, 1250, 0.22);
@@ -572,14 +595,19 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.dprop("decor/planter_01", 2620, 1100, 0.17);
     this.dprop("decor/sign_01", 2860, 1020, 0.16);
 
-    // ---- pondside (future) ----
+    // ---- pondside: the damaged fountain clearing ----
+    // The hero landmark here is a genuine damaged↔restored PRODUCTION PAIR (see
+    // buildPond) — it gets real open space around it rather than being crowded
+    // by decoration, so it reads as the destination, not one prop among many.
     this.buildPond();
-    this.dprop("nature/rock_large_01", 1240, 1980, 0.22, 180);
-    this.dprop("nature/rock_medium_01", 1860, 1960, 0.2, 150);
-    this.dprop("vegetation/bush_mixed_01", 1420, 2040, 0.2);
-    this.dprop("structures/bridge_wood_01", 1750, 2060, 0.34);
-    this.dprop("decor/picnic_table_01", 1240, 2120, 0.2, 160);
-    this.dprop("decor/sign_01", 1120, 1900, 0.16);
+    this.dprop("nature/rock_medium_01", 1200, 1940, 0.18, 140);
+    this.dprop("vegetation/bush_mixed_01", 1880, 1920, 0.19);
+    this.dprop("decor/sign_01", 1080, 1840, 0.16);
+    // the bridge/rocks/picnic spot sit apart, at the clearing's far edge —
+    // a second small destination, not a wall around the fountain
+    this.dprop("structures/bridge_wood_01", 1780, 2140, 0.34);
+    this.dprop("nature/rock_large_01", 2000, 2160, 0.22, 180);
+    this.dprop("decor/picnic_table_01", 1620, 2220, 0.2, 160);
   }
 
   /**
@@ -598,11 +626,13 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private buildPond(): void {
     const x = 1540;
     const y = 1980;
-    this.pondDamaged = this.dprop("water/pond_damaged_01", x, y, 0.5);
+    // the clearing's hero landmark — sized to be unmistakably the destination,
+    // not one prop among the surrounding decoration
+    this.pondDamaged = this.dprop("water/pond_damaged_01", x, y, 0.62);
     this.pondRestored = this.add
       .image(x, y, "dg_pond_restored_01")
       .setOrigin(0.5, 1)
-      .setScale(0.5)
+      .setScale(0.62)
       .setDepth(y + 0.1)
       .setAlpha(0);
     this.pondLilies = this.add
@@ -651,9 +681,14 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         const ov = new RegionOverlay(this, rect, hashRegion(key), opts);
         this.regions.set(key, ov);
         if (unlockedRegions.has(rect.id)) ov.applyRestoredInstant();
-      } else {
-        addDormantVeil(this, rect);
       }
+      // The three not-yet-wired regions (treeGrove/farmCorner/pondside) used to
+      // get a flat grey/purple multiply-tint wash here (`addDormantVeil`) — at
+      // the scale these regions render (1.7x/2.0x the rect), the three washes
+      // overlapped into one large grey/brown blob across the right two-thirds
+      // of the world. Their damage now reads through the actual assets placed
+      // there (the dead oak, the cracked dry fountain, sparse dormant growth)
+      // instead of an overlay — "beautifully rendered broken", not a grey box.
     }
 
     const alive = progression.unlockedObjects().length;

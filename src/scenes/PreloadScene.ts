@@ -150,6 +150,7 @@ export class PreloadScene extends Phaser.Scene {
     dg("foreground/foreground_03");
 
     dg("terrain/terrain_04");
+    dg("terrain/grass_ground"); // the supplied painted ground reference — the world's base terrain
 
     // fx + ui
     svg("spark", 48, 48);
