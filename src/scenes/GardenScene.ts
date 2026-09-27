@@ -619,13 +619,18 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // area, not two: the cracked fountain, the waterfall feeding it, and the
     // bridge crossing the water it feeds, sharing one clearing ----
     this.buildPond();
-    // rock/bush transition blending the fountain's edge into the lawn
-    this.dprop("nature/rock_medium_01", 1220, 1920, 0.18, 140);
-    this.dprop("vegetation/bush_mixed_01", 1860, 1900, 0.19);
-    this.dprop("decor/sign_01", 1100, 1820, 0.16); // marks the meadow/pond path junction
-    // the bench looks out over the water, the picnic spot sits by the bridge
-    this.dprop("decor/bench_01", 1260, 2180, 0.2, 140);
-    this.dprop("decor/picnic_table_01", 1980, 2200, 0.2, 160);
+    // rock/bush transition, kept at the CLEARING's edge — not against the
+    // fountain's own rim — so the hero landmark reads first, with real
+    // negative space around it before anything else begins.
+    this.dprop("nature/rock_medium_01", 1120, 1900, 0.18, 140);
+    this.dprop("vegetation/bush_mixed_01", 1960, 1880, 0.19);
+    this.dprop("decor/sign_01", 1060, 1800, 0.16); // marks the meadow/pond path junction
+    // one bench for this whole area already exists in the cottage garden,
+    // facing this same water feature — a second one here was redundant
+    this.dprop("decor/picnic_table_01", 1980, 2220, 0.2, 160);
+    // the bridge actually crosses the water flowing from the waterfall down
+    // toward the fountain — sat across that line, not floating near it
+    this.dprop("structures/bridge_wood_01", 1790, 1690, 0.34).setAngle(40);
   }
 
   /**
@@ -635,18 +640,41 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
    * fountain clearing — a route to follow, not disconnected dirt patches.
    */
   private buildPaths(): void {
-    const seg = (x: number, y: number, scale: number, angle: number, alpha = 1) =>
-      this.add.image(x, y, "path").setOrigin(0.5, 0.5).setScale(scale).setAngle(angle).setDepth(-110).setAlpha(alpha);
+    // A narrow, worn dirt trail — not a road. Lower alpha and a warm-grass tint
+    // let it recede into the lawn instead of reading as a solid beige plaza;
+    // small flower/grass tufts along it (below) break its edge into the grass
+    // rather than leaving a clean geometric boundary. Segments are spaced with
+    // real gaps rather than overlapping — the gaps read as "path continues
+    // under the grass/a cluster", which is how a real trail behaves, and it's
+    // what stops multiple segments stacking into a wide "junction plaza".
+    const seg = (x: number, y: number, scale: number, angle: number) =>
+      this.add
+        .image(x, y, "path")
+        .setOrigin(0.5, 0.5)
+        .setScale(scale)
+        .setAngle(angle)
+        .setDepth(-110)
+        .setAlpha(0.62)
+        .setTint(0xcfa876);
 
     // meadow (entrance) -> cottage garden
-    seg(1180, 1420, 0.62, 100);
-    seg(1440, 1330, 0.55, 78);
+    seg(1160, 1440, 0.3, 102);
+    seg(1480, 1310, 0.28, 76);
     // cottage garden -> magic tree grove
-    seg(1940, 1340, 0.58, 96);
-    seg(2220, 1400, 0.5, 82);
+    seg(1980, 1350, 0.3, 94);
+    seg(2260, 1410, 0.26, 80);
     // meadow -> fountain clearing (south spur)
-    seg(1200, 1700, 0.6, 148);
-    seg(1380, 1880, 0.55, 165);
+    seg(1180, 1720, 0.3, 150);
+    seg(1360, 1900, 0.26, 166);
+
+    // small tufts breaking the path's edge into the surrounding grass —
+    // a few per stretch, alternating sides, not a clean border
+    const tuft = (x: number, y: number, key: string, scale: number) =>
+      this.add.image(x, y, `dg_${key}`).setOrigin(0.5, 1).setScale(scale).setDepth(-105);
+    tuft(1250, 1400, "flowers_yellow_01", 0.06);
+    tuft(1560, 1290, "flowers_pink_01", 0.06);
+    tuft(2060, 1310, "flowers_blue_01", 0.06);
+    tuft(1260, 1660, "flowers_pink_01", 0.06);
   }
 
   /**
@@ -680,11 +708,14 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       .setScale(0.16)
       .setDepth(y + 0.2)
       .setAlpha(0);
+    // pushed well clear of the fountain's own footprint, and scaled down a
+    // touch, so these two large hero-scale assets don't visually compete —
+    // the fountain reads first, the waterfall is a secondary feature behind it
     this.add
-      .image(x + 260, y - 340, "dg_waterfall_01")
+      .image(x + 480, y - 560, "dg_waterfall_01")
       .setOrigin(0.5, 1)
-      .setScale(0.42)
-      .setDepth(y - 340);
+      .setScale(0.34)
+      .setDepth(y - 560);
     this.refreshPond(false);
   }
 
