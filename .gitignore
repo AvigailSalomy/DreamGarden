@@ -56,3 +56,9 @@ Thumbs.db
 *.local
 *.tmp
 tmp/
+
+# Raw asset-generation source (Frosted Valley) — the processed production PNGs
+# actually used by the game live in public/assets/frosted/; these are the
+# original ungrouped Gemini exports, not meant to ship.
+Game_Assets_frozen_world_Compressed/
+src/Game_Assets_frozen_world_Compressed/

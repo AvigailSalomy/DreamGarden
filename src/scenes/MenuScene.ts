@@ -75,6 +75,22 @@ export class MenuScene extends Phaser.Scene {
       { hitW: 56, hitH: 56 },
     );
 
+    // Frosted Valley — an isolated new-world build; launched as an overlay on
+    // top of Menu, its own "‹" back button just stops it.
+    makeIconButton(
+      this,
+      inset.left + 30,
+      inset.top + 32,
+      "❄️",
+      28,
+      () => {
+        Sfx.unlock();
+        Sfx.tap();
+        this.scene.launch("FrostedValley");
+      },
+      { hitW: 56, hitH: 56 },
+    );
+
     this.scale.on(Phaser.Scale.Events.RESIZE, this.relayout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       this.scale.off(Phaser.Scale.Events.RESIZE, this.relayout, this),

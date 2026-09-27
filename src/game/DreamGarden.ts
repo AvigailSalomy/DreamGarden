@@ -10,6 +10,7 @@ import { UIScene } from "../scenes/UIScene";
 import { RequestsScene } from "../scenes/RequestsScene";
 import { LevelGoalsScene } from "../scenes/LevelGoalsScene";
 import { CarrotDashScene } from "../scenes/CarrotDashScene";
+import { FrostedValleyScene } from "../scenes/FrostedValleyScene";
 
 export function startGame(): Phaser.Game {
   return new Phaser.Game({
@@ -38,6 +39,7 @@ export function startGame(): Phaser.Game {
       RequestsScene,
       LevelGoalsScene,
       CarrotDashScene,
+      FrostedValleyScene,
     ],
   });
 }
