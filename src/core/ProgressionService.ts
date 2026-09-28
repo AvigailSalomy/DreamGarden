@@ -51,6 +51,29 @@ export class ProgressionService {
     return this.catalog.every((o) => this.isUnlocked(o.id));
   }
 
+  /** Animal-only rescue order, derived from each animal's `unlock_order`
+   *  (Rabbit → Bird → Hedgehog → Squirrel → Fox → Deer) — the non-animal
+   *  Wildflowers task interleaves elsewhere but never gates an animal. */
+  animalOrder(): GardenObjectDef[] {
+    return this.catalog
+      .filter((o) => o.category === "animal")
+      .sort((a, b) => a.unlock_order - b.unlock_order);
+  }
+
+  /** The one animal currently open for rescue — the first not-yet-unlocked
+   *  animal in sequence — or null once every animal is rescued. */
+  activeAnimalId(): string | null {
+    return this.animalOrder().find((o) => !this.isUnlocked(o.id))?.id ?? null;
+  }
+
+  /** True for an animal whose turn hasn't come yet: not rescued, and not the
+   *  current active animal. Rescued animals and the active one are never locked. */
+  isAnimalLocked(id: string): boolean {
+    const def = this.def(id);
+    if (!def || def.category !== "animal" || this.isUnlocked(id)) return false;
+    return id !== this.activeAnimalId();
+  }
+
   taskVM(): CurrentTaskVM | null {
     const object = this.currentTask;
     if (!object) return null;

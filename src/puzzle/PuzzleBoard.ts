@@ -3,7 +3,7 @@ import { COLORS, RADIUS } from "../ui/theme";
 import { mulberry32, hashStr } from "../core/rng";
 import { nearestEmptyCell, shuffle, trayLayout } from "./slice";
 import type { Cell, GridSize } from "./slice";
-import { edgeGrid, piecePath } from "./jigsaw";
+import { edgeGrid, piecePath, pathToPoints } from "./jigsaw";
 import type { PieceEdges } from "./jigsaw";
 import { PuzzleTile } from "./PuzzleTile";
 import { petalPuff, sparkleBurst } from "../fx/Particles";
@@ -158,25 +158,61 @@ export class PuzzleBoard {
     this.tabBoard = tabS * this.frameScale;
   }
 
+  /**
+   * The exact jigsaw outline for cell `index`, at world position (x,y) — the
+   * SAME edges[] + piecePath() geometry the matching loose piece is cut from
+   * (see bakePieces/buildTiles), turned into drawable points via the shared
+   * pathToPoints(). This is the one source of truth buildCells() (the visual
+   * recess) and hint() (the glow) both read from — never two approximations
+   * that could drift apart.
+   */
+  private slotOutlinePoints(index: number, x: number, y: number): { x: number; y: number }[] {
+    const pathStr = piecePath(this.edges[index], this.cellW, this.cellH, this.tabBoard, x - this.cellW / 2, y - this.cellH / 2);
+    return pathToPoints(pathStr);
+  }
+
+  /**
+   * Wooden inset-tray look: each slot is recessed to the EXACT jigsaw shape
+   * of the piece that belongs there (soft inner shadow + thin warm-brown
+   * contour + a faint ghost of the piece's own art) — no rectangular cell
+   * ever shows, before or after pieces are placed.
+   */
   private buildCells(): void {
     const { grid, centerX, centerY, boardSize } = this.o;
     const left = centerX - boardSize / 2 + this.cellW / 2;
     const top = centerY - boardSize / 2 + this.cellH / 2;
-    const slot = this.scene.add.graphics().setDepth(3);
+    const slot = this.scene.add.graphics().setDepth(2);
     for (let row = 0; row < grid.rows; row++) {
       for (let col = 0; col < grid.cols; col++) {
         const index = row * grid.cols + col;
         const x = left + col * this.cellW;
         const y = top + row * this.cellH;
         this.cells.push({ index, x, y, filled: false });
-        slot.lineStyle(2, 0x7c5a3f, 0.35);
-        slot.strokeRoundedRect(
-          x - this.cellW / 2 + 3,
-          y - this.cellH / 2 + 3,
-          this.cellW - 6,
-          this.cellH - 6,
-          RADIUS.tile,
-        );
+
+        const pts = this.slotOutlinePoints(index, x, y);
+        slot.fillStyle(0x6b4a30, 0.22);
+        slot.beginPath();
+        slot.moveTo(pts[0].x, pts[0].y);
+        for (let k = 1; k < pts.length; k++) slot.lineTo(pts[k].x, pts[k].y);
+        slot.closePath();
+        slot.fillPath();
+        // wide, soft, low-alpha ring fakes an inner shadow (Graphics has no
+        // native shadow blur); the thin crisp stroke on top is the contour.
+        slot.lineStyle(7, 0x2a1c14, 0.14);
+        slot.strokePoints(pts, true);
+        slot.lineStyle(2, 0x7c5a3f, 0.5);
+        slot.strokePoints(pts, true);
+
+        // faint ghost of the actual artwork — reuses the SAME baked, already
+        // shape-clipped piece texture the loose piece displays, just dimmed
+        const ghostKey = this.jkey(index);
+        if (this.scene.textures.exists(ghostKey)) {
+          this.scene.add
+            .image(x, y, ghostKey)
+            .setDisplaySize(this.frameW, this.frameH)
+            .setAlpha(0.1)
+            .setDepth(2.5);
+        }
       }
     }
   }
@@ -192,8 +228,11 @@ export class PuzzleBoard {
 
     // Adaptive tray: scale the scattered pieces so the WHOLE grid of them fits both
     // the width and the height available below the board (above the Hint button) —
-    // no piece is ever off-screen, on 360x640 up to desktop.
-    const perRow = total <= 4 ? 2 : 3;
+    // no piece is ever off-screen, on 360x640 up to desktop. More columns as the
+    // piece count climbs (6..16 across the six animals) keeps the tray a wide, shallow
+    // band instead of a tall scroll of rows — trayScale below still adapts the actual
+    // piece size to whatever space that leaves.
+    const perRow = total <= 4 ? 2 : total <= 8 ? 3 : total <= 12 ? 4 : 5;
     const rows = Math.ceil(total / perRow);
     const trayTop0 = centerY + boardSize / 2 + 48; // clears the wood frame + drop shadow
     const trayBottom = this.o.trayBottomY ?? this.scene.scale.height - 96;
@@ -257,29 +296,124 @@ export class PuzzleBoard {
     }
   }
 
+  /** Which piece the last Hint press targeted, and how many times in a row
+   *  (pressing again for the SAME still-unplaced piece escalates to the
+   *  stronger ghost-copy demonstration; a different piece resets to level 1). */
+  private hintedPieceIndex: number | null = null;
+  private hintLevel = 0;
+
+  /**
+   * Hint teaches, it doesn't solve: (1) the one loose piece it's talking
+   * about glows while the rest dim, (2) its EXACT jigsaw-shaped destination
+   * (same geometry as slotOutlinePoints/buildCells — never a rectangle)
+   * glows in turn, (3) a short sparkle trail connects the two. The player
+   * still drags the piece over themselves. Pressing Hint again for the same
+   * piece adds a translucent ghost of it gliding to the slot and back.
+   */
   hint(): void {
     const t = this.tiles.find((x) => !x.placed);
     if (!t) return;
     const cell = this.cells.find((c) => c.index === t.solutionIndex);
     if (!cell) return;
+
+    this.hintLevel = this.hintedPieceIndex === t.solutionIndex ? this.hintLevel + 1 : 1;
+    this.hintedPieceIndex = t.solutionIndex;
+
     Sfx.sparkle();
     this.hintG.clear();
-    this.hintG.lineStyle(5, COLORS.gold, 1);
-    this.hintG.strokeRoundedRect(
-      cell.x - this.cellW / 2 + 3,
-      cell.y - this.cellH / 2 + 3,
-      this.cellW - 6,
-      this.cellH - 6,
-      RADIUS.tile,
-    );
-    this.hintG.setAlpha(0);
+
+    // 1) the specific piece glows; every other unplaced piece dims briefly
+    this.tiles.forEach((tile) => {
+      if (tile.placed) return;
+      if (tile === t) {
+        this.scene.tweens.add({
+          targets: tile,
+          scaleX: tile.scaleX * 1.16,
+          scaleY: tile.scaleY * 1.16,
+          duration: 200,
+          yoyo: true,
+          repeat: 2,
+          ease: "Sine.easeInOut",
+        });
+      } else {
+        this.scene.tweens.add({ targets: tile, alpha: 0.4, duration: 200, yoyo: true, hold: 500, ease: "Sine.easeInOut" });
+      }
+    });
+
+    // 2) after a beat, its exact-shaped slot glows — same geometry as the
+    // recess drawn in buildCells(), so the glow silhouette matches perfectly
+    this.scene.time.delayedCall(520, () => {
+      if (t.placed) return;
+      const pts = this.slotOutlinePoints(t.solutionIndex, cell.x, cell.y);
+      this.hintG.lineStyle(6, COLORS.gold, 1);
+      this.hintG.strokePoints(pts, true);
+      this.hintG.setAlpha(0);
+      this.scene.tweens.add({
+        targets: this.hintG,
+        alpha: 1,
+        duration: 220,
+        yoyo: true,
+        repeat: 2,
+        onComplete: () => this.hintG.clear(),
+      });
+      this.drawHintTrail(t.x, t.y, cell.x, cell.y);
+    });
+
+    // Level 2+: a translucent ghost of the actual piece glides to its slot
+    // and back — a stronger demonstration, but it never stays there itself.
+    if (this.hintLevel >= 2) {
+      this.scene.time.delayedCall(1000, () => this.playGhostHint(t, cell));
+    }
+  }
+
+  /** A few sparkles staggered along the piece→slot line — a visual cue to
+   *  follow, not a mechanical arrow. */
+  private drawHintTrail(fromX: number, fromY: number, toX: number, toY: number): void {
+    const steps = 5;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const x = fromX + (toX - fromX) * t;
+      const y = fromY + (toY - fromY) * t;
+      this.scene.time.delayedCall(i * 70, () => sparkleBurst(this.scene, x, y, 3, 10));
+    }
+  }
+
+  /** Stronger hint: a dimmed copy of the piece's own (already shape-clipped)
+   *  art eases from its current spot to the slot and eases back — demonstrating
+   *  the move without ever actually placing the piece for the player. */
+  private playGhostHint(tile: PuzzleTile, cell: Cell): void {
+    if (tile.placed) return;
+    const key = this.scene.textures.exists(this.jkey(tile.solutionIndex)) ? this.jkey(tile.solutionIndex) : this.o.texKey;
+    const ghost = this.scene.add
+      .image(tile.x, tile.y, key)
+      .setDisplaySize(this.frameW, this.frameH)
+      .setAlpha(0)
+      .setDepth(400);
     this.scene.tweens.add({
-      targets: this.hintG,
-      alpha: 1,
-      duration: 220,
-      yoyo: true,
-      repeat: 2,
-      onComplete: () => this.hintG.clear(),
+      targets: ghost,
+      alpha: 0.55,
+      duration: 200,
+      onComplete: () => {
+        this.scene.tweens.add({
+          targets: ghost,
+          x: cell.x,
+          y: cell.y,
+          duration: 520,
+          ease: "Sine.easeInOut",
+          onComplete: () => {
+            this.scene.tweens.add({
+              targets: ghost,
+              x: tile.x,
+              y: tile.y,
+              alpha: 0,
+              duration: 420,
+              delay: 200,
+              ease: "Sine.easeInOut",
+              onComplete: () => ghost.destroy(),
+            });
+          },
+        });
+      },
     });
   }
 

@@ -104,8 +104,15 @@ describe("RequestsService", () => {
     expect(requests.minigameLevel("wildflowers")).toBe(1);
   });
 
-  it("Rabbit -> Wildflowers -> Songbird catalog order is unaffected by requests", () => {
-    expect(CATALOG.map((o) => o.id)).toEqual(["rabbit", "wildflowers", "bird"]);
+  it("catalog order is unaffected by requests", () => {
+    expect(CATALOG.map((o) => o.id)).toEqual([
+      "rabbit",
+      "bird",
+      "hedgehog",
+      "squirrel",
+      "fox",
+      "deer",
+    ]);
   });
 
   it("puzzle stays gated until requests are complete, unlocks once they are (combined check)", () => {
@@ -117,5 +124,22 @@ describe("RequestsService", () => {
     requests.purchase("rabbit", softHay.id);
     requests.purchase("rabbit", cloverPatch.id);
     expect(puzzleAvailable()).toBe(true);
+  });
+});
+
+describe("habitat restoration transactions", () => {
+  it("acquisition never restores automatically; explicit restore consumes once and survives reload", () => {
+    const { requests, save } = makeStack();
+    const source = { id: "rabbit_carrot_patch", produces: "carrot", restoreCost: 5 };
+    expect(requests.restoreSourceNow(source).ok).toBe(false);
+    requests.collectResource("carrot", 5);
+    expect(requests.isSourceRestored(source.id)).toBe(false);
+    expect(requests.restoreSourceNow(source).ok).toBe(true);
+    expect(requests.resourceCount("carrot")).toBe(0);
+    expect(requests.restoreSourceNow(source).ok).toBe(false);
+    const reloaded = new SaveService(KEY);
+    expect(reloaded.state.restoredSources[source.id]).toBe(true);
+    expect(reloaded.state.resources.carrot).toBe(0);
+    expect(save.state.restoredSources[source.id]).toBe(true);
   });
 });

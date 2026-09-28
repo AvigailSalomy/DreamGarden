@@ -4,7 +4,7 @@ import { makePanel, makePill } from "../ui/Panel";
 import { Button } from "../ui/Button";
 import { confirmModal, settingsModal } from "../ui/Modal";
 import { safeInsets } from "../util/safeArea";
-import { bus, economy, progression, requests, resetGarden } from "../game/services";
+import { bus, economy, progression, resetGarden } from "../game/services";
 import { Sfx } from "../fx/Sfx";
 
 /** Screen-fixed HUD. Its camera never pans or zooms, so it stays put over the garden. */
@@ -354,19 +354,20 @@ export class UIScene extends Phaser.Scene {
     const task = progression.currentTask;
     if (!task || this.revealing || progression.isUnlocked(task.id)) return;
     this.hideCard();
-    if (requests.isComplete(task.id)) {
-      bus.emit("puzzle:start", { objectId: task.id });
-    } else {
-      bus.emit("requests:open", { objectId: task.id });
-    }
+    // Always through the Request screen — restoring the habitat is how the
+    // puzzle is earned, and once all 3 sources are restored the Request
+    // screen's own "ready" state is what launches the puzzle (see
+    // HabitatRequestScene.onHelpNow) so the flow reads consistently either
+    // way the player reaches it (tapping the animal, or this HUD button).
+    bus.emit("habitatRequest:open", { objectId: task.id });
   }
 
   setTaskFromProgression(): void {
     if (!this.cardTitle) return;
     const vm = progression.taskVM();
     if (!vm) {
-      this.cardTitle.setText("The garden is whole");
-      this.cardStory.setText("Every friend has come home. Wander and enjoy it a while.");
+      this.cardTitle.setText("Every friend is safe");
+      this.cardStory.setText("Your friends are home. Visit them to help restore their habitats.");
       this.cardThumb.setTexture("rabbit").setDisplaySize(this.thumbSize, this.thumbSize).setTint(0x4a3f5c).setAlpha(0.22);
       this.cardThumbQ.setAlpha(0.35);
       this.playBtn.setLabel("Play").setEnabled(false).stopPulse();
@@ -387,13 +388,7 @@ export class UIScene extends Phaser.Scene {
     this.playBtn.setEnabled(!unlocked && !this.revealing);
     if (!unlocked && !this.revealing) this.playBtn.startPulse();
     else this.playBtn.stopPulse();
-    if (!unlocked) {
-      this.playBtn.setLabel(
-        requests.isComplete(vm.object.id)
-          ? `Complete ${shortName(vm.object.name)}'s Puzzle`
-          : `${shortName(vm.object.name)}'s Requests`,
-      );
-    }
+    this.playBtn.setLabel(unlocked ? "Play" : `Help ${shortName(vm.object.name)}`);
     this.drawPips(vm.completed, vm.required);
   }
 

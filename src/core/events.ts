@@ -20,6 +20,18 @@ export interface GameEvents {
   "coins:changed": { total: number; delta: number; reason: string };
   "requests:open": { objectId: string };
   "requests:closed": { objectId: string };
+  "habitatRequest:open": { objectId: string };
+  "habitatRequest:closed": { objectId: string };
   "request:purchased": { objectId: string; requestId: string };
+  "resourceAcquisition:open": { objectId: string; sourceId: string; resourceId: string; amount: number };
+  "resource:collected": { resourceId: string; amount: number; total: number };
+  "resourceSource:restored": { sourceId: string };
   "minigame:completed": { objectId: string; level: number; coinsEarned: number };
+  "shop:open": Record<string, never>;
+  "shop:closed": Record<string, never>;
+  /** ShopScene closes itself and hands off to GardenScene's world placement mode. */
+  "decor:placeStart": { itemId: string };
+  "decor:placed": { placementId: string; itemId: string; x: number; y: number };
+  "decor:placeCancelled": { itemId: string };
+  "accessory:changed": { animalId: string };
 }

@@ -2,10 +2,11 @@ import Phaser from "phaser";
 import { HORIZON, START_FOCUS, WORLD_HEIGHT, WORLD_WIDTH } from "../game/config";
 import { COLORS } from "../ui/theme";
 import { makeIconButton } from "../ui/hit";
-import { bus, progression, requests, save } from "../game/services";
+import { bus, progression, requests, save, shop } from "../game/services";
 import { CATALOG } from "../data/objects";
 import { CameraController } from "../world/CameraController";
 import { GardenObjectView } from "../world/GardenObjectView";
+import { silhouetteTextureKey } from "../world/silhouette";
 import { RegionOverlay } from "../world/RegionOverlay";
 import type { RegionRect } from "../world/RegionOverlay";
 import { IdleBehavior } from "../behavior/IdleBehavior";
@@ -14,8 +15,10 @@ import type { RevealHost } from "../reveal/types";
 import { ambientFireflies, sparkleBurst } from "../fx/Particles";
 import { Sfx } from "../fx/Sfx";
 import type { GardenObjectDef } from "../data/types";
-import { HABITATS } from "../data/habitats";
-import type { RestorationResource, ResourceRequirement } from "../data/habitats";
+import { HABITATS, habitatFor, sourceById } from "../data/habitats";
+import type { RestorationResource } from "../data/habitats";
+import { RESOURCES } from "../data/resources";
+import { calculateAccessoryTransform, accessoryIconFor, accessoryItem, decorItem } from "../data/shop";
 import type { UIScene } from "./UIScene";
 
 /** Region rectangles (centre x/y + w/h) laid across the expanded world. */
@@ -41,9 +44,9 @@ const GARDEN_CENTER = { x: 1500, y: 1520 };
  */
 const TOUR: Array<{ x: number; y: number; zoom: number | "wide"; hold: number }> = [
   { x: GARDEN_CENTER.x, y: GARDEN_CENTER.y, zoom: "wide", hold: 1400 }, // whole garden
-  { x: 1560, y: 940, zoom: 0.95, hold: 520 }, // dormant Garden Heart
+  { x: 1560, y: 940, zoom: 0.95, hold: 520 }, // garden clearing
   { x: 2500, y: 1240, zoom: 0.9, hold: 520 }, // dead Great Oak
-  { x: 1540, y: 1960, zoom: 0.9, hold: 520 }, // broken / dry Pond
+  { x: 1540, y: 1960, zoom: 0.9, hold: 520 }, // pondside clearing
   { x: 470, y: 1600, zoom: 0.95, hold: 520 }, // collapsed Wildflowers
   { x: 1760, y: 1150, zoom: 1.0, hold: 520 }, // empty Songbird perch
   { x: START_FOCUS.x, y: START_FOCUS.y, zoom: 1.0, hold: 300 }, // Rabbit meadow
@@ -59,6 +62,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private views = new Map<string, GardenObjectView>();
   private idles = new Map<string, IdleBehavior>();
   private regions = new Map<string, RegionOverlay>();
+
+  /** Per-animal pre-rescue silhouette overlay + ambient glow (see spawnObjectView /
+   *  revealAnimalSilhouette). Children of the animal's own GardenObjectView.container,
+   *  so they inherit its exact position/scale/idle-roam for free. */
+  private animalGhosts = new Map<string, Phaser.GameObjects.Image>();
+  private animalGlows = new Map<string, Phaser.GameObjects.Image>();
 
   private screenObjects: Phaser.GameObjects.Image[] = [];
   private taskGlow?: Phaser.GameObjects.Image;
@@ -104,6 +113,8 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.spawnSavedObjects();
     this.applyPurchasedWorldEffectsInstant();
     this.updateTaskMarker();
+    this.renderPlacedDecor();
+    this.refreshAllAccessories();
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.wireEvents();
@@ -141,6 +152,34 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         bus.emit("puzzle:closed", { objectId, solved: true, unlockedNow });
         return unlockedNow;
       };
+      // dumps every display-list object whose world bounds intersect the
+      // given world-space rect — for tracking down a stray rectangle/overlay
+      // by direct inspection instead of guessing which asset it's baked into
+      (window as unknown as Record<string, unknown>).__dgDumpArea = (x: number, y: number, w: number, h: number) => {
+        const hits: unknown[] = [];
+        const rect = new Phaser.Geom.Rectangle(x, y, w, h);
+        this.children.list.forEach((obj) => {
+          const o = obj as Phaser.GameObjects.Image & { displayWidth?: number; displayHeight?: number };
+          if (typeof o.x !== "number" || typeof o.y !== "number") return;
+          const b = o.getBounds ? o.getBounds() : null;
+          const intersects = b
+            ? Phaser.Geom.Rectangle.Overlaps(rect, b)
+            : rect.contains(o.x, o.y);
+          if (!intersects) return;
+          hits.push({
+            type: o.type,
+            texture: (o as { texture?: { key?: string } }).texture?.key,
+            x: o.x,
+            y: o.y,
+            depth: o.depth,
+            alpha: o.alpha,
+            w: o.displayWidth,
+            h: o.displayHeight,
+            visible: o.visible,
+          });
+        });
+        return hits;
+      };
     }
   }
 
@@ -151,7 +190,6 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private onResize(): void {
     this.layoutScreen();
     this.camera?.onResize();
-    this.positionForegroundFraming();
   }
 
   private layoutScreen(): void {
@@ -215,6 +253,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     });
 
     await this.playTour();
+    // After the whole-garden establishing pan, focus specifically on the
+    // first animal's habitat and its three damaged sources — the player's
+    // very first close look at the garden should be "here is what's broken
+    // and here is who needs help", not the full six-habitat open world.
+    const firstAnimal = progression.animalOrder()[0];
+    if (firstAnimal) await this.introduceHabitat(firstAnimal.id);
     this.hideSkip();
 
     save.state.openingGardenTourSeen = true;
@@ -240,6 +284,30 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     }
     // always settle on the meadow at a comfortable inspect zoom
     await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, this.tourSkipped ? 500 : 760, 1);
+  }
+
+  /**
+   * Shared close-up camera tour of one animal's habitat: settle on its
+   * silhouette, step through its three damaged resource sources in turn (the
+   * REAL damaged production assets already in the world — nothing faked up
+   * for this sequence), then return to the silhouette/habitat overview.
+   * Used both for the opening (Part C/D) and to hand off to the next animal
+   * right after a rescue (Part H). Respects the same skip flag as playTour.
+   */
+  private async introduceHabitat(objectId: string): Promise<void> {
+    const def = progression.def(objectId);
+    const habitat = habitatFor(objectId);
+    if (!def || !habitat) return;
+    const dur = this.tourSkipped ? 260 : 760;
+    const hold = this.tourSkipped ? 0 : 700;
+    await this.camera.focusOn(def.garden_position.x, def.garden_position.y - 60, dur, 1.05);
+    await wait(this, hold);
+    for (const res of habitat.resources) {
+      if (this.tourSkipped) break;
+      await this.camera.focusOn(res.position.x, res.position.y, dur, 1.15);
+      await wait(this, hold);
+    }
+    await this.camera.focusOn(def.garden_position.x, def.garden_position.y - 60, dur, 1);
   }
 
   /**
@@ -284,12 +352,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     });
     this.letterUp = false;
 
+    // Silhouette -> letter -> the puzzle is immediately playable (tap Play on
+    // the task card, or the silhouette itself). No coin-purchase gate sits
+    // between the letter and the rescue puzzle — see data/types.ts RequestDef
+    // for the still-available, unrelated decorative-prop economy some objects
+    // may offer post-rescue, which this flow does not touch.
     this.updateTaskMarker();
-    if (!requests.isComplete(objectId)) {
-      // the new core loop: letter -> Requests screen, before the puzzle is ever reachable
-      this.openRequestsScreen(objectId);
-      return;
-    }
     this.camera.enable();
     this.ui.setRevealing(false);
     this.ui.setTaskFromProgression();
@@ -304,18 +372,33 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   private async runPostStage(revealed: GardenObjectDef): Promise<void> {
     await wait(this, 500);
     if (revealed.overview_text) this.toast(revealed.overview_text);
-    this.refreshPond(true);
-    this.refreshHabitatResources(revealed.id);
     await wait(this, 1100);
 
-    const next = progression.currentTask;
-    if (next && !progression.isUnlocked(next.id)) {
-      const from = revealed.garden_position;
-      const to = next.garden_position;
-      const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - 30 };
-      await this.camera.focusOn(mid.x, mid.y, 900, 0.9);
-      await wait(this, 420);
-      await this.presentLetterThenActivate(next.id);
+    // Part I: the FIRST time Nibs is rescued, open the Shop before moving on
+    // to the next animal — a short, one-time beat, not a tutorial.
+    if (revealed.id === "rabbit" && !shop.isUnlocked) {
+      shop.unlock();
+      this.refreshShopLockVisual();
+      if (this.shopBuilding) {
+        await this.camera.focusOn(this.shopBuilding.x, this.shopBuilding.y - 60, 800, 1.05);
+        this.toast("The Garden Shop is now open!");
+        await wait(this, 1100);
+      }
+    }
+
+    // The sequential hand-off (Part H): wake the next animal's silhouette,
+    // tour its habitat + damaged sources, then hand control back. CATALOG is
+    // exactly the six animals now (no intermediate non-animal task), so this
+    // is the only progression path — the old currentTask/Letter hand-off
+    // below only still fires once every animal is rescued (nextAnimalId null).
+    const nextAnimalId = progression.activeAnimalId();
+    if (nextAnimalId) {
+      this.activateAnimalSilhouette(nextAnimalId);
+      await this.introduceHabitat(nextAnimalId);
+      this.camera.enable();
+      this.ui.setRevealing(false);
+      this.ui.setTaskFromProgression();
+      this.ui.showCard();
       return;
     }
 
@@ -400,13 +483,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // identically on both renderer paths.
     this.bakeHorizonBlend();
     this.add.image(0, HORIZON - 110, "dg_horizon_blend").setOrigin(0, 0).setDisplaySize(WORLD_WIDTH, 150).setDepth(-185);
-
-    this.add
-      .image(1560, WORLD_HEIGHT + 10, "path")
-      .setOrigin(0.5, 1)
-      .setScale(1.6)
-      .setDepth(-120)
-      .setAlpha(0.95);
+    // NOTE: a single huge "path" instance used to sit here (scale 1.6, alpha
+    // 0.95, spanning nearly the whole world height) — at that scale its soft
+    // organic curve was imperceptible and it read as a big flat translucent
+    // tan rectangle behind the production art. Removed: buildPaths() below
+    // already threads the meadow/cottage/grove/fountain with properly-scaled,
+    // low-alpha path segments that actually read as a worn trail.
   }
 
   /** Bakes the horizon-fade gradient into a small canvas texture once (see the
@@ -445,31 +527,6 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
    */
   private dprop(key: string, x: number, y: number, scale: number, shadowW = 0): Phaser.GameObjects.Image {
     return this.prop(`dg_${key.split("/").pop()}`, x, y, scale, shadowW);
-  }
-
-  /** A small, purely decorative, non-interactive creature — atmosphere only, no
-   *  progression/economy tie. A gentle idle bob is its only behaviour. */
-  private critter(key: string, x: number, y: number, scale: number, flip = false): void {
-    const img = this.add
-      .image(x, y, `dg_${key.split("/").pop()}`)
-      .setOrigin(0.5, 1)
-      .setScale(scale)
-      .setFlipX(flip)
-      .setDepth(y);
-    this.add
-      .image(x, y + 3, "shadow")
-      .setDisplaySize(scale * 210, scale * 70)
-      .setAlpha(0.3)
-      .setDepth(y - 1);
-    this.tweens.add({
-      targets: img,
-      y: y - 6,
-      duration: 1600 + Phaser.Math.Between(-200, 400),
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-      delay: Phaser.Math.Between(0, 800),
-    });
   }
 
   private tree(
@@ -572,8 +629,9 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.buildPaths();
     this.buildHabitatResources();
 
-    // ---- neglected landmark: Garden Heart (future) ----
-    this.prop("heart_dormant", 1560, 980, 1.15, 150);
+    // small ambient grounding decoration (the "Garden Heart" placeholder
+    // landmark that used to sit here — a future feature that was never
+    // built — was removed; it had no gameplay purpose)
     this.dprop("nature/rock_small_01", 1440, 1010, 0.15, 110);
     this.dprop("vegetation/fern_01", 1660, 1000, 0.14);
 
@@ -582,80 +640,106 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // gapped fence marks the yard boundary (not a wall), the cottage is given
     // its own clearing, and each small object sits at the spot that gives it
     // a reason to be there.
-    this.dprop("vegetation/flower_arch_01", 1560, 1170, 0.62); // entrance, on the path from the meadow
-    for (const [x, y, s] of [
-      [1420, 1300, 0.34],
-      [1660, 1280, 0.3],
-    ] as const)
-      this.dprop("decor/fence_01", x, y, s); // yard boundary either side of the arch — not a wall
-    this.dprop("structures/cottage_small_01", 1980, 1230, 0.44, 260); // its own clearing, not buried in trees
+    // Entrance gate: the arch IS the opening — the fence stubs sit tight
+    // against its own left/right edges (same y as its base) rather than
+    // floating below/beside it, so the whole thing reads as one continuous
+    // boundary line with a deliberate gap for the path, not two independent
+    // props. Each stub's outer post is grounded into a flower/fern clump
+    // (its "reason to end there") instead of stopping bare in open grass.
+    this.dprop("vegetation/flower_arch_01", 1400, 1135, 0.42); // the gate itself
+    this.dprop("decor/fence_01", 1100, 1135, 0.2); // left stub, tight against the arch's edge
+    this.dprop("decor/fence_01", 2090, 1170, 0.2); // right stub, tight against the arch's edge
+    this.dprop("vegetation/fern_01", 940, 1210, 0.13); // grounds the left post's outer end
+    this.dprop("vegetation/flowers_pink_01", 2150, 1210, 0.14); // grounds the right post's outer end
+    this.dprop("structures/cottage_small_01", 2150, 1130, 0.36, 220); // its own clearing, not buried in trees
     // cottageLantern + cottageDoorstepFlowers (BIRD_HABITAT resources) are
     // built by buildHabitatResources() below — damaged/restored on Pip's unlock
     this.dprop("decor/flower_cart_01", 2080, 1310, 0.2, 150); // cart belongs to the cottage garden
     this.dprop("decor/birdhouse_01", 1260, 1180, 0.18); // near the perch/arch, where a bird would actually nest
     // bench faces the cottage clearing, not wedged against the fence
-    this.dprop("decor/bench_01", 1840, 1360, 0.2, 140);
+    this.dprop("decor/bench_01", 2110, 1420, 0.2, 140);
 
-    // ---- animal meadow (rabbit) — the entrance, and a hero clearing ----
-    // one damage cue (the dead shrub), one rock+moss cluster the hedgehog
-    // actually lives in, one flower patch, generous open ground between them
+    // ---- animal meadow: Rabbit's clearing + Hedgehog's nook ----
+    // one damage cue (the dead shrub), generous open ground between the two
+    // small animals' own areas. Each resource-source image already carries
+    // its own grounding (grass edge, rocks, dirt baked into the art), so this
+    // only needs a LIGHT supporting touch, not a second layer of clutter.
     this.prop("dead_shrub", 640, 1420, 1.0, 150);
-    this.dprop("nature/rock_medium_01", 560, 1600, 0.2, 150);
-    this.dprop("nature/mushrooms_01", 700, 1650, 0.13);
-    this.critter("animals/hedgehog", 660, 1610, 0.13); // rocks + bushes, per its actual habitat
-    this.dprop("vegetation/fern_01", 500, 1660, 0.15);
-    // meadowBloom (RABBIT_HABITAT resource) is built by buildHabitatResources()
-    // below — absent/dormant until Nibs is rescued, then blooms in
-    this.dprop("vegetation/bush_green_01", 1220, 1500, 0.19);
+    this.dprop("vegetation/bush_mixed_01", 1220, 1500, 0.19);
+    this.dprop("decor/sign_01", 200, 1520, 0.16); // marks the meadow/flowerbed path junction
+    // Hedgehog's Wild Herb & Mushroom Nook — its 3 resources are built by
+    // buildHabitatResources() below (see data/habitats.ts HEDGEHOG_HABITAT)
+    this.dprop("vegetation/fern_01", 420, 2020, 0.15);
+    this.dprop("decor/sign_01", 340, 2040, 0.16); // marks the meadow/nook path junction
 
-    // ---- flower bed — the dormant/damaged area, right by the entrance ----
-    // The Wildflowers object sprite (wildflower_bed) at (470,1652) IS the planter —
-    // flowers grow from its own soil, so it stays untouched; this only dresses the
-    // ground AROUND it. Restored/unrestored flower art frames the same spot the
-    // planter already occupies, so its own bloom animation still reads as the hero
-    // moment rather than being upstaged by a duplicate bed.
-    // flowerBedGrowth (WILDFLOWER_HABITAT resource) is built by
-    // buildHabitatResources() below — dead vegetation_04 until restored, then
-    // the real vegetation_01 bloom
+    // ---- flower bed — Wildflowers' own dormant/damaged planter (untouched:
+    // its own sprite bloom-in is the hero moment here) ----
     this.dprop("vegetation/flowers_pink_01", 300, 1520, 0.18);
     this.dprop("nature/rock_small_01", 690, 1660, 0.16, 120);
-    this.dprop("decor/sign_01", 200, 1520, 0.16); // marks the meadow/flowerbed path junction
 
-    // ---- magic tree grove — the dead Great Oak, a hero restoration with its
-    // own restrained cluster and open ground kept clear around it ----
-    this.prop("oak_dead", 2500, 1460, 1.2, 220);
-    this.dprop("nature/rock_medium_01", 2680, 1560, 0.2, 150);
-    this.prop("sapling", 2320, 1500, 0.9, 80);
+    // ---- magic tree grove: Squirrel's grove + Fox's woodland ----
+    // the dead oak stays as the grove's own future-restoration landmark;
+    // Squirrel's and Fox's 3 resources each are built by buildHabitatResources()
+    // below (see data/habitats.ts SQUIRREL_HABITAT / FOX_HABITAT)
+    this.prop("oak_dead", 2350, 1740, 0.55, 100);
+    this.prop("sapling", 2340, 1630, 0.45, 40);
     this.dprop("decor/sign_01", 2140, 1400, 0.16); // marks the cottage/grove path junction
-    // supporting trees/vegetation sit farther back, framing rather than crowding
-    this.dprop("vegetation/hedge_straight_01", 2760, 1640, 0.26);
-    this.dprop("nature/log_01", 2820, 1500, 0.2, 150);
-    // the grove's own woodland residents
-    this.critter("animals/squirrel", 2260, 1560, 0.15);
-    this.critter("animals/fox", 2780, 1420, 0.16, true);
-    this.critter("animals/deer", 2560, 1620, 0.18);
+    this.dprop("vegetation/hedge_straight_01", 2600, 1740, 0.24);
 
-    // ---- locked area (future) — visibly a destination, deliberately sparse ----
-    this.dprop("structures/animal_house_01", 2860, 1000, 0.24, 140);
-    this.dprop("decor/planter_01", 2660, 1080, 0.17);
-    this.dprop("decor/sign_01", 2860, 1160, 0.16);
+    // ---- Deer's Enchanted Clearing (was the empty "locked/future" corner) ----
+    // Deer's 3 resources are built by buildHabitatResources() below (see
+    // data/habitats.ts DEER_HABITAT)
+    this.dprop("decor/sign_01", 2440, 1140, 0.16); // marks the grove/clearing path junction
 
-    // ---- fountain + water/bridge clearing (pondside) — one coherent water
-    // area, not two: the cracked fountain, the waterfall feeding it, and the
-    // bridge crossing the water it feeds, sharing one clearing ----
-    this.buildPond();
-    // rock/bush transition, kept at the CLEARING's edge — not against the
-    // fountain's own rim — so the hero landmark reads first, with real
-    // negative space around it before anything else begins.
+    // ---- pondside clearing — ordinary scenery only. (A damaged/restored
+    // fountain landmark used to anchor this clearing; it was removed — see
+    // the Part-4 pass — for implying a seventh restoration objective the
+    // player could never act on. This decoration is not tied to any quest.)
     this.dprop("nature/rock_medium_01", 1120, 1900, 0.18, 140);
     this.dprop("vegetation/bush_mixed_01", 1960, 1880, 0.19);
     this.dprop("decor/sign_01", 1060, 1800, 0.16); // marks the meadow/pond path junction
-    // one bench for this whole area already exists in the cottage garden,
-    // facing this same water feature — a second one here was redundant
     this.dprop("decor/picnic_table_01", 1980, 2220, 0.2, 160);
-    // the bridge actually crosses the water flowing from the waterfall down
-    // toward the fountain — sat across that line, not floating near it
     this.dprop("structures/bridge_wood_01", 1790, 1690, 0.34).setAngle(40);
+
+    this.buildShop();
+  }
+
+  /**
+   * The Dream Garden Shop building (Part K): its own clearing in the
+   * previously-empty farmCorner area, north-east of the grove — clear of
+   * every habitat/animal/resource and the cottage. Grounded the same way as
+   * every other structure (dprop's soft elliptical shadow, no platform),
+   * with its own small flower/path accents so it reads as belonging to the
+   * garden rather than dropped in on bare grass. Locked (visible, dimmed,
+   * non-interactive) until shop.isUnlocked — see runPostStage's Part I hook.
+   */
+  private shopBuilding?: Phaser.GameObjects.Image;
+  private buildShop(): void {
+    const x = 2680;
+    const y = 980;
+    this.dprop("vegetation/flowers_pink_01", 2540, 1060, 0.14);
+    this.dprop("vegetation/flowers_yellow_01", 2830, 1050, 0.14);
+    this.dprop("decor/sign_01", 2440, 1080, 0.16); // marks the grove/shop path junction
+    const shopImg = this.dprop("accessories/shop_building", x, y, 0.42, 300);
+    this.shopBuilding = shopImg;
+    shopImg.setInteractive({ useHandCursor: true });
+    shopImg.on("pointerup", () => this.handleShopTap());
+    this.refreshShopLockVisual();
+  }
+
+  private refreshShopLockVisual(): void {
+    if (!this.shopBuilding) return;
+    this.shopBuilding.setAlpha(shop.isUnlocked ? 1 : 0.55);
+    this.shopBuilding.setTint(shop.isUnlocked ? 0xffffff : 0x9aa08c);
+  }
+
+  private handleShopTap(): void {
+    if (!shop.isUnlocked) {
+      this.toast("Rescue Nibs to open the Garden Shop!");
+      return;
+    }
+    if (this.flowBusy || this.reveal.isRunning || this.letterUp) return;
+    bus.emit("shop:open", {});
   }
 
   /**
@@ -682,9 +766,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         .setAlpha(0.62)
         .setTint(0xcfa876);
 
-    // meadow (entrance) -> cottage garden
+    // meadow (entrance) -> cottage garden, threaded straight through the
+    // gate's own centre (x1560) rather than past the fence beside it
     seg(1160, 1440, 0.3, 102);
-    seg(1480, 1310, 0.28, 76);
+    seg(1560, 1300, 0.28, 90);
     // cottage garden -> magic tree grove
     seg(1980, 1350, 0.3, 94);
     seg(2260, 1410, 0.26, 80);
@@ -702,141 +787,100 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     tuft(1260, 1660, "flowers_pink_01", 0.06);
   }
 
-  /**
-   * The pondside's only genuine damaged↔restored PRODUCTION ASSET PAIR (see the
-   * asset-pack inventory — every other region reuses the existing flat-tint
-   * RegionOverlay veil, since no other real damaged/restored pair was supplied).
-   * Pondside itself isn't a wired restoration target yet (no catalog entry — see
-   * the report), so rather than fabricate a new progression mechanic for it, its
-   * reveal rides the honest signal already tracked: the whole visible garden
-   * being fully restored. `refreshPond()` re-checks this live on every unlock.
-   */
-  private pondDamaged?: Phaser.GameObjects.Image;
-  private pondRestored?: Phaser.GameObjects.Image;
-  private pondLilies?: Phaser.GameObjects.Image;
-
-  private buildPond(): void {
-    const x = 1540;
-    const y = 1980;
-    // the clearing's hero landmark — sized to be unmistakably the destination,
-    // not one prop among the surrounding decoration
-    this.pondDamaged = this.dprop("water/pond_damaged_01", x, y, 0.62);
-    this.pondRestored = this.add
-      .image(x, y, "dg_pond_restored_01")
-      .setOrigin(0.5, 1)
-      .setScale(0.62)
-      .setDepth(y + 0.1)
-      .setAlpha(0);
-    this.pondLilies = this.add
-      .image(x - 40, y - 20, "dg_water_lilies_01")
-      .setOrigin(0.5, 1)
-      .setScale(0.16)
-      .setDepth(y + 0.2)
-      .setAlpha(0);
-    // pushed well clear of the fountain's own footprint, and scaled down a
-    // touch, so these two large hero-scale assets don't visually compete —
-    // the fountain reads first, the waterfall is a secondary feature behind it
-    this.add
-      .image(x + 480, y - 560, "dg_waterfall_01")
-      .setOrigin(0.5, 1)
-      .setScale(0.34)
-      .setDepth(y - 560);
-    this.refreshPond(false);
-  }
-
-  /** Swap the pond to its restored state once every current restoration is done. */
-  private refreshPond(animate: boolean): void {
-    if (!this.pondDamaged || !this.pondRestored || !this.pondLilies) return;
-    const allDone = progression.unlockedObjects().length >= CATALOG.length;
-    const dAlpha = allDone ? 0 : 1;
-    const rAlpha = allDone ? 1 : 0;
-    if (!animate) {
-      this.pondDamaged.setAlpha(dAlpha);
-      this.pondRestored.setAlpha(rAlpha);
-      this.pondLilies.setAlpha(rAlpha);
-      return;
-    }
-    if (this.pondRestored.alpha === rAlpha) return; // no change
-    this.tweens.add({ targets: this.pondDamaged, alpha: dAlpha, duration: 900, ease: "Sine.easeOut" });
-    this.tweens.add({ targets: [this.pondRestored, this.pondLilies], alpha: rAlpha, duration: 900, ease: "Sine.easeOut" });
-    if (allDone) sparkleBurst(this, this.pondRestored.x, this.pondRestored.y - 80, 20, 80);
-  }
-
   /* ---------------- habitat restoration resources (data/habitats.ts) ---------------- */
 
   private resourceViews = new Map<string, Phaser.GameObjects.Image>();
-  private resourceMeta = new Map<string, RestorationResource>();
+  private lastCollectedAt = new Map<string, number>();
 
-  private isRequirementMet(req: ResourceRequirement): boolean {
-    switch (req.kind) {
-      case "objectUnlocked":
-        return progression.isUnlocked(req.objectId);
-      case "requestPurchased":
-        return requests.purchasedIds(req.objectId).has(req.requestId);
-      case "allUnlocked":
-        return progression.unlockedObjects().length >= CATALOG.length;
-    }
-  }
-
-  /** Builds every habitat resource except the fountain's (buildPond already
-   *  owns that one — it predates this data table and works, so it's left as
-   *  the special case rather than risking a regression to re-derive it). */
+  /**
+   * Every habitat's 3 damaged/restored sources are part of the world from the
+   * very start, next to that animal's silhouette — restoring them is how the
+   * player earns the animal's rescue puzzle (see habitatReady()). Each
+   * source's own damaged/restored state is independent, persisted save truth.
+   */
   private buildHabitatResources(): void {
     for (const habitat of HABITATS) {
-      if (habitat.id === "fountainClearing") continue;
       for (const res of habitat.resources) this.buildResource(res);
     }
   }
 
-  private buildResource(res: RestorationResource): void {
-    const met = this.isRequirementMet(res.requirement);
-    const { x, y } = res.position;
-
-    if (res.tintOnly) {
-      const img = this.dprop(`decor/${res.restoredAsset}`, x, y, res.scale, res.shadowW ?? 0);
-      img.setTint(met ? 0xffffff : 0x50505c).setAlpha(met ? 1 : 0.8);
-      this.resourceViews.set(res.id, img);
-      this.resourceMeta.set(res.id, res);
-      return;
-    }
-
-    if (met) {
-      const img = this.dprop(`vegetation/${res.restoredAsset}`, x, y, res.scale, res.shadowW ?? 0);
-      this.resourceViews.set(res.id, img);
-    } else if (res.damagedAsset) {
-      const img = this.dprop(`vegetation/${res.damagedAsset}`, x, y, res.scale, res.shadowW ?? 0);
-      this.resourceViews.set(res.id, img);
-    }
-    // else: damaged state = absence — nothing rendered until the requirement is met
-    this.resourceMeta.set(res.id, res);
+  /** All 3 of this animal's habitat sources are restored — the gate for its rescue puzzle. */
+  habitatReady(objectId: string): boolean {
+    const habitat = habitatFor(objectId);
+    return !habitat || habitat.resources.every((r) => requests.isSourceRestored(r.id));
   }
 
-  /** Live-swap every resource this newly-unlocked object owns — called from
-   *  runPostStage alongside refreshPond, so a resource blooms in during the
-   *  SAME session it's unlocked, not only after a reload. */
-  private refreshHabitatResources(objectId: string): void {
-    for (const habitat of HABITATS) {
-      if (habitat.animalId !== objectId) continue;
-      for (const res of habitat.resources) {
-        if (res.requirement.kind !== "objectUnlocked" || res.requirement.objectId !== objectId) continue;
-        const existing = this.resourceViews.get(res.id);
-        const { x, y } = res.position;
+  private resourceTexture(res: RestorationResource, restored: boolean): string {
+    const key = restored ? res.restoredAsset : res.damagedAsset;
+    return res.id.startsWith("bird_") ? `${key}_grounded` : key;
+  }
 
-        if (res.tintOnly && existing) {
-          this.tweens.add({ targets: existing, alpha: 1, duration: 600, ease: "Sine.easeOut" });
-          existing.setTint(0xffffff);
-          sparkleBurst(this, x, y - 40, 12, 40);
-          continue;
-        }
+  private buildResource(res: RestorationResource): Phaser.GameObjects.Image {
+    const restored = requests.isSourceRestored(res.id);
+    const { x, y } = res.position;
+    const img = this.dprop(this.resourceTexture(res, restored), x, y, res.scale, 0);
+    if (restored) this.makeCollectible(img, res);
+    else this.makeRestorable(img, res);
+    this.resourceViews.set(res.id, img);
+    return img;
+  }
 
-        if (existing) this.tweens.add({ targets: existing, alpha: 0, duration: 400, onComplete: () => existing.destroy() });
-        const img = this.dprop(`vegetation/${res.restoredAsset}`, x, y, res.scale, res.shadowW ?? 0);
-        img.setScale(0).setAlpha(0);
-        this.tweens.add({ targets: img, scale: res.scale, alpha: 1, duration: 500, delay: 150, ease: "Back.easeOut" });
-        this.resourceViews.set(res.id, img);
-        sparkleBurst(this, x, y - 30, 14, 44);
-      }
-    }
+  /**
+   * A damaged source is environmental storytelling, not a shortcut — tapping
+   * it points the player at the animal, who is the real entry point for its
+   * Request screen (see openHabitatRequest). It never restores anything by
+   * itself.
+   */
+  private makeRestorable(img: Phaser.GameObjects.Image, res: RestorationResource): void {
+    img.setInteractive({ useHandCursor: true });
+    img.on("pointerup", () => {
+      const habitat = HABITATS.find((h) => h.resources.some((r) => r.id === res.id));
+      const def = habitat ? progression.def(habitat.animalId) : undefined;
+      this.toast(def ? `${def.name} can tell you what ${res.label} needs.` : `${res.label} needs help.`);
+      this.tweens.add({ targets: img, angle: { from: -2, to: 2 }, duration: 90, yoyo: true, repeat: 3 });
+    });
+  }
+
+  /** A restored source is tappable — a real, persisted +N to that resource's
+   *  inventory (data/resources.ts), with a short per-source cooldown so it
+   *  isn't spammable, and a small sparkle/popup instead of a silent number
+   *  change. Session-only cooldown (not persisted) is an acceptable, low-risk
+   *  simplification given scope. */
+  private makeCollectible(img: Phaser.GameObjects.Image, res: RestorationResource): void {
+    img.setInteractive({ useHandCursor: true });
+    img.on("pointerup", () => {
+      const last = this.lastCollectedAt.get(res.id) ?? 0;
+      const now = this.time.now;
+      if (now - last < 1500) return;
+      this.lastCollectedAt.set(res.id, now);
+      const total = requests.collectResource(res.produces, 1);
+      Sfx.coin();
+      sparkleBurst(this, img.x, img.y - img.displayHeight * 0.6, 8, 30);
+      this.toast(`+1 ${RESOURCES[res.produces]?.label ?? res.produces} (${total})`);
+      this.tweens.add({ targets: img, scaleX: img.scaleX * 1.08, scaleY: img.scaleY * 1.08, duration: 120, yoyo: true });
+    });
+  }
+
+  /** Live-swap ONE specific resource source from damaged to restored — called
+   *  the instant its funding request completes (see wireEvents' request:purchased
+   *  handler), so the habitat visibly improves during the SAME session, not
+   *  only after a reload. */
+  private restoreResourceSource(sourceId: string): void {
+    const res = sourceById(sourceId);
+    const existing = this.resourceViews.get(sourceId);
+    if (!res || !existing) return;
+
+    const { x, y } = res.position;
+    const bird = res.id.startsWith("bird_");
+    this.tweens.add({ targets: existing, alpha: 0, scale: existing.scale * (bird ? 1 : 0.9), duration: 350, onComplete: () => existing.destroy() });
+    const img = this.dprop(this.resourceTexture(res, true), x, y, res.scale, 0);
+    img.setScale(bird ? res.scale : 0).setAlpha(0);
+    this.tweens.add({ targets: img, scale: res.scale, alpha: 1, duration: 550, delay: bird ? 0 : 200, ease: bird ? "Sine.easeOut" : "Back.easeOut" });
+    this.makeCollectible(img, res);
+    this.resourceViews.set(sourceId, img);
+    sparkleBurst(this, x, y - res.scale * 300, 18, 60);
+    Sfx.sparkle();
+    this.time.delayedCall(150, () => Sfx.bloomChime());
   }
 
   private buildRegions(): void {
@@ -847,7 +891,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       if (BLOOMABLE.has(key)) {
         // the flower bed's bloom lives in its planter sprite, not scattered on the lawn
         const opts =
-          key === "flowerBed"
+          (key === "flowerBed" || key === "cottageYard")
             ? { flowerCount: 0, flowerTints: WILDFLOWER_TINTS }
             : undefined;
         const ov = new RegionOverlay(this, rect, hashRegion(key), opts);
@@ -871,46 +915,16 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     );
   }
 
-  private fgLeft?: Phaser.GameObjects.Image;
-  private fgRight?: Phaser.GameObjects.Image;
-
   private buildForeground(): void {
     const v = this.add.image(0, 0, "vignette").setOrigin(0, 0).setScrollFactor(0).setDepth(8000);
     this.screenObjects.push(v);
-
-    // Screen-space corner framing (locked light-weight production art, not the
-    // interactive world) — sells "the camera is physically inside the garden"
-    // without ever covering the HUD (top) or the task card (bottom-centre): kept
-    // to the bottom corners only, small, and clear of the card's centred width.
-    this.fgLeft = this.add
-      .image(-10, 0, "dg_foreground_02")
-      .setOrigin(0, 1)
-      .setScale(0.22)
-      .setAlpha(0.92)
-      .setScrollFactor(0)
-      .setDepth(7999);
-    this.fgRight = this.add
-      .image(0, 0, "dg_foreground_03")
-      .setOrigin(1, 1)
-      .setScale(0.2)
-      .setFlipX(true)
-      .setAlpha(0.92)
-      .setScrollFactor(0)
-      .setDepth(7999);
-    this.positionForegroundFraming();
-  }
-
-  private positionForegroundFraming(): void {
-    const h = this.scale.height;
-    const w = this.scale.width;
-    this.fgLeft?.setPosition(-10, h + 10);
-    this.fgRight?.setPosition(w + 10, h + 10);
   }
 
   /* ---------------- objects ---------------- */
 
+  /** Animals are residents before rescue; only non-animal restorations wait for unlock. */
   private spawnSavedObjects(): void {
-    for (const def of progression.unlockedObjects()) {
+    for (const def of CATALOG.filter(d => d.category === "animal" || progression.isUnlocked(d.id))) {
       const view = this.spawnObjectView(def, false);
       view.setGroundPosition(def.garden_position.x, def.garden_position.y);
       this.attachIdle(view, def);
@@ -932,6 +946,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     const def = progression.def(objectId);
     const req = def?.requests.find((r) => r.id === requestId);
     if (!def || !req) return;
+
     // consumed materials (see GardenObjectDef.requestPropsTransient) never appear in the world
     if (def.requestPropsTransient) return;
 
@@ -976,12 +991,129 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         // well below the production art's own footprint (was 140/200/160,
         // tuned for the old, smaller flat-SVG bodies)
         shadowWidth: def.category === "plant" ? 130 : def.category === "animal" ? 80 : 110,
+        // a comfortable tap target independent of the (now much smaller)
+        // visual sprite — see GardenObjectView.onTap
+        hitSize: def.category === "animal" ? 110 : undefined,
       });
+      if (def.category === "animal") {
+        view.onTap(() => this.handleAnimalTap(def.id));
+        if (!progression.isUnlocked(def.id)) this.buildAnimalSilhouette(view, def);
+      }
       this.views.set(def.id, view);
     }
     view.container.setVisible(!startHidden);
     view.setDepthFromY();
     return view;
+  }
+
+  /** Breathing/glow tweens currently running per animal silhouette — tracked so
+   *  activateAnimalSilhouette() can tell a still-locked ghost from an active one. */
+  private silhouetteAwake = new Set<string>();
+
+  /**
+   * A locked animal is a recognisable dark silhouette of its OWN final sprite —
+   * same footprint/position/scale/origin — not a placeholder shape. The real
+   * body (GardenObjectView.body) is hidden underneath (alpha 0) until rescue,
+   * when revealAnimalSilhouette() crossfades the two: exact spot, no relocation.
+   *
+   * Only the ONE currently-active animal (progression.activeAnimalId()) gets
+   * the inviting breathing glow; every animal further down the rescue order
+   * sits still and dim — visibly "not yet" rather than "come tap me too".
+   */
+  private buildAnimalSilhouette(view: GardenObjectView, def: GardenObjectDef): void {
+    view.body.setAlpha(0);
+    const locked = progression.isAnimalLocked(def.id);
+    const ghost = this.add
+      .image(0, 0, silhouetteTextureKey(this, def.garden_sprite))
+      .setOrigin(0.5, 1)
+      .setAlpha(locked ? 0.16 : 0.4);
+    view.container.add(ghost);
+    this.animalGhosts.set(def.id, ghost);
+    view.registerGhost(ghost);
+
+    const glow = this.add
+      .image(0, -ghost.displayHeight * 0.55, "glow")
+      .setScale(Phaser.Math.Clamp(ghost.displayWidth / 220, 0.4, 1.1))
+      .setAlpha(0)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    view.container.add(glow);
+    view.container.sendToBack(glow); // glow behind the silhouette, silhouette behind nothing (body is invisible anyway)
+    this.animalGlows.set(def.id, glow);
+
+    if (!locked) this.activateAnimalSilhouette(def.id);
+  }
+
+  /** Wake a silhouette into the "this is the active rescue" breathing/glow
+   *  look — used both for the animal that's active from the start, and to
+   *  visually promote the next animal in sequence once the previous one is
+   *  rescued (see runPostStage). Safe to call more than once (no-ops if
+   *  already awake, or if there's no silhouette left because it's rescued). */
+  private activateAnimalSilhouette(objectId: string): void {
+    if (this.silhouetteAwake.has(objectId)) return;
+    const ghost = this.animalGhosts.get(objectId);
+    const glow = this.animalGlows.get(objectId);
+    if (!ghost) return;
+    this.silhouetteAwake.add(objectId);
+    ghost.setAlpha(0.4);
+    this.tweens.add({ targets: ghost, alpha: 0.54, duration: 1700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    if (glow) {
+      glow.setAlpha(0.14);
+      this.tweens.add({ targets: glow, alpha: 0.26, duration: 1500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+  }
+
+  /** Rescue moment: crossfade the silhouette away as the real body fades in, in place. */
+  revealAnimalSilhouette(objectId: string): Promise<void> {
+    const ghost = this.animalGhosts.get(objectId);
+    const view = this.views.get(objectId);
+    this.animalGhosts.delete(objectId);
+    const glow = this.animalGlows.get(objectId);
+    this.animalGlows.delete(objectId);
+    this.silhouetteAwake.delete(objectId);
+    if (!ghost || !view) return Promise.resolve();
+    view.registerGhost(undefined);
+    return new Promise((resolve) => {
+      this.tweens.add({ targets: view.body, alpha: 1, duration: 450, ease: "Sine.easeOut" });
+      this.tweens.add({
+        targets: [ghost, glow].filter(Boolean),
+        alpha: 0,
+        duration: 450,
+        ease: "Sine.easeIn",
+        onComplete: () => {
+          ghost.destroy();
+          glow?.destroy();
+          resolve();
+        },
+      });
+    });
+  }
+
+  /**
+   * The silhouette (and the real animal, once rescued) is the entry point for
+   * its habitat's Request screen — restore all 3 of its damaged sources there
+   * to earn the rescue puzzle. Animals unlock in sequence (rabbit → bird →
+   * hedgehog → squirrel → fox → deer, see ProgressionService.animalOrder) —
+   * a future animal's silhouette does nothing but hint at what's next.
+   */
+  private handleAnimalTap(objectId: string): void {
+    const habitat = habitatFor(objectId);
+    if (!habitat) return;
+    if (this.flowBusy || this.reveal.isRunning || this.letterUp) return;
+    if (progression.isUnlocked(objectId)) {
+      this.toast(`${progression.def(objectId)?.name ?? "This friend"} is home safe. ✓`);
+      return;
+    }
+    if (progression.isAnimalLocked(objectId)) {
+      const activeName = progression.def(progression.activeAnimalId() ?? "")?.name ?? "your current friend";
+      this.toast(`Help ${activeName} first — this friend is waiting their turn.`);
+      return;
+    }
+    bus.emit("habitatRequest:open", { objectId });
+  }
+
+  pauseIdle(objectId: string): void {
+    this.idles.get(objectId)?.stop();
+    this.idles.delete(objectId);
   }
 
   attachIdle(view: GardenObjectView, def: GardenObjectDef): void {
@@ -1005,64 +1137,24 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
 
   /* ---------------- task marker (ghost / footprint) ---------------- */
 
+  /**
+   * Historically built a dim "next task" ghost silhouette for whatever
+   * non-animal object was up next (previously: the standalone Wildflowers
+   * task). Progression is now exactly the six animals (data/objects.ts
+   * CATALOG), and every animal already gets its own, richer silhouette via
+   * buildAnimalSilhouette/activateAnimalSilhouette — so there is no longer
+   * any "next task" that needs this separate marker. Kept as pure cleanup
+   * (clearing anything a stale/old save might have left) rather than deleted
+   * outright, since taskGhost/taskGlow/taskFootprint are still read defensively
+   * elsewhere (e.g. fadeTaskMarker's target list).
+   */
   private updateTaskMarker(): void {
-    const task = progression.currentTask;
     this.taskGlow?.destroy();
     this.taskGhost?.destroy();
     this.taskFootprint?.destroy();
     this.taskGlow = undefined;
     this.taskGhost = undefined;
     this.taskFootprint = undefined;
-    if (!task || progression.isUnlocked(task.id)) return;
-
-    const { x, y } = task.garden_position;
-
-    // THE silhouette: the exact final sprite — same key, position, scale, origin,
-    // orientation (no flip, no rotation) — rendered as a dark placeholder. When the
-    // real object arrives it lands in precisely this footprint. Only a gentle alpha
-    // breath animates; the transform never moves, so alignment is exact.
-    // same depth rule the revealed GardenObjectView uses (1000 + groundY), so the
-    // silhouette sits on the correct layer — in front of the fence for the perched
-    // bird, etc. — and the real sprite lands in precisely this footprint.
-    const depth = 1000 + y;
-    const ghost = this.add
-      .image(x, y, task.garden_sprite)
-      .setOrigin(0.5, 1)
-      .setScale(task.garden_scale)
-      .setFlipX(false)
-      .setAngle(0)
-      .setDepth(depth - 0.5)
-      .setTint(0x3f3550)
-      .setAlpha(0.34);
-    this.taskGhost = ghost;
-    this.tweens.add({
-      targets: ghost,
-      alpha: 0.46,
-      duration: 1700,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
-
-    const gw = ghost.displayWidth;
-    const gh = ghost.displayHeight;
-
-    // SECONDARY ambient feedback only — a soft glow behind the silhouette
-    const glow = this.add
-      .image(x, y - gh * 0.5, "glow")
-      .setDepth(depth - 1)
-      .setScale(Phaser.Math.Clamp(gw / 340, 0.5, 1.4))
-      .setAlpha(0.16)
-      .setBlendMode(Phaser.BlendModes.ADD);
-    this.taskGlow = glow;
-    this.tweens.add({
-      targets: glow,
-      alpha: 0.28,
-      duration: 1500,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
   }
 
   /** Fade the silhouette out beneath the arriving object (RevealHost). */
@@ -1110,6 +1202,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         // bypasses a stale entry-flow flag and clears it so the flow can't stay stuck.
         if (this.reveal.isRunning) return;
         if (this.flowBusy && !force) return;
+        // hard gate: the rescue puzzle stays locked until all 3 habitat
+        // sources are restored, regardless of which UI path tried to start it.
+        if (!progression.isUnlocked(objectId) && !this.habitatReady(objectId)) return;
+        if (progression.isAnimalLocked(objectId)) return;
         this.flowBusy = false;
         this.camera.disable();
         this.scene.launch("Puzzle", { objectId });
@@ -1129,6 +1225,70 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         this.camera.enable();
         this.ui.setTaskFromProgression();
         this.ui.showCard();
+      }),
+    );
+
+    this.offFns.push(
+      bus.on("habitatRequest:open", ({ objectId }) => {
+        if (this.reveal.isRunning || this.flowBusy) return;
+        // hard gate, mirroring puzzle:start below — a locked animal's Request
+        // screen must not open no matter which path tried to open it.
+        if (progression.isAnimalLocked(objectId)) return;
+        // restore the fixed HUD in case we're returning from the Garden Maze,
+        // which hides it in favour of its own in-run HUD (see resourceAcquisition:open below)
+        this.scene.setVisible(true, "UI");
+        this.camera.disable();
+        this.scene.launch("HabitatRequest", { objectId });
+        this.scene.pause();
+      }),
+    );
+    this.offFns.push(
+      bus.on("resourceAcquisition:open", ({ objectId, sourceId, resourceId, amount }) => {
+        if (this.reveal.isRunning) return;
+        // the maze has its own complete HUD (title/target/leaves/hearts) —
+        // hide the fixed Garden HUD so its coin pill/task card don't show
+        // through un-dimmed behind the maze's own camera-scrolled world.
+        this.scene.setVisible(false, "UI");
+        this.camera.disable();
+        this.scene.launch("MazeIntro", { objectId, sourceId, resourceId, amount });
+        if (this.scene.isActive()) this.scene.pause();
+      }),
+    );
+    this.offFns.push(
+      bus.on("habitatRequest:closed", () => {
+        this.camera.enable();
+      }),
+    );
+    this.offFns.push(
+      bus.on("shop:open", () => {
+        if (this.reveal.isRunning || this.flowBusy) return;
+        this.camera.disable();
+        this.scene.launch("Shop");
+        this.scene.pause();
+      }),
+    );
+    this.offFns.push(
+      bus.on("shop:closed", () => {
+        this.camera.enable();
+      }),
+    );
+    this.offFns.push(
+      bus.on("decor:placeStart", ({ itemId }) => {
+        this.beginDecorPlacement(itemId);
+      }),
+    );
+    this.offFns.push(
+      bus.on("accessory:changed", ({ animalId }) => {
+        this.refreshAccessories(animalId);
+      }),
+    );
+    this.offFns.push(
+      bus.on("resourceSource:restored", ({ sourceId }) => {
+        // live-swap the world sprite the instant the player confirms
+        // restoration in the Habitat Request screen (Garden is paused
+        // underneath it, but the swap should already be in place when we
+        // resume so the reveal is visible immediately)
+        this.restoreResourceSource(sourceId);
       }),
     );
 
@@ -1171,6 +1331,157 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     );
   }
 
+  /* ---------------- Shop: accessories on animals ---------------- */
+
+  private accessorySprites = new Map<string, Phaser.GameObjects.Image[]>();
+
+  /** Rebuild the composed accessory images on one animal from its currently
+   *  equipped slots, via the SHARED calculateAccessoryTransform() (data/shop.ts)
+   *  — the exact same fitting the Shop's Try-It-On preview reads. Never
+   *  touches the original animal PNG, purely additional child images. */
+  private refreshAccessories(animalId: string): void {
+    const view = this.views.get(animalId);
+    if (!view) return;
+    this.accessorySprites.get(animalId)?.forEach((img) => img.destroy());
+    const sprites: Phaser.GameObjects.Image[] = [];
+    const equipped = shop.equippedFor(animalId);
+    for (const accessoryId of Object.values(equipped)) {
+      const item = accessoryItem(accessoryId);
+      if (!item) continue;
+      const img = this.add.image(0, 0, accessoryIconFor(animalId, accessoryId) ?? item.icon).setOrigin(0.5, 0.5);
+      const t = calculateAccessoryTransform(animalId, accessoryId, view.body.width, view.body.height, img.width, img.height);
+      if (!t) { img.destroy(); continue; }
+      img.setPosition(t.x, t.y);
+      img.setScale(t.scale);
+      img.setAngle(t.rotation);
+      // A Container renders children in LIST order, not by .depth — so a
+      // "behind the body" accessory (the backpack) must be INSERTED before
+      // view.body in the list, not just given a lower .depth (which a
+      // Container ignores for its own children).
+      if (t.depthOffset < 0) {
+        view.container.addAt(img, view.container.getIndex(view.body));
+      } else {
+        view.container.add(img);
+      }
+      sprites.push(img);
+    }
+    this.accessorySprites.set(animalId, sprites);
+    view.registerAccessories(sprites);
+  }
+
+  private refreshAllAccessories(): void {
+    for (const def of CATALOG) {
+      if (def.category === "animal" && progression.isUnlocked(def.id)) this.refreshAccessories(def.id);
+    }
+  }
+
+  /* ---------------- Shop: world decor placement (Part N) ---------------- */
+
+  private placedDecorViews = new Map<string, Phaser.GameObjects.Image>();
+
+  private renderPlacedDecor(): void {
+    for (const p of shop.placedDecor()) this.spawnPlacedDecor(p.placementId, p.itemId, p.x, p.y);
+  }
+
+  private spawnPlacedDecor(placementId: string, itemId: string, x: number, y: number): void {
+    const item = decorItem(itemId);
+    if (!item) return;
+    const img = this.prop(item.icon, x, y, item.scale, 90);
+    this.placedDecorViews.set(placementId, img);
+  }
+
+  private placement?: {
+    itemId: string;
+    preview: Phaser.GameObjects.Image;
+    cancelBtn: Phaser.GameObjects.Container;
+    capture: Phaser.GameObjects.Rectangle;
+  };
+
+  private beginDecorPlacement(itemId: string): void {
+    const item = decorItem(itemId);
+    if (!item || shop.decorOwnedCount(itemId) <= 0) return;
+    this.cancelDecorPlacement();
+    this.scene.setVisible(true, "UI");
+    const start = this.cameras.main.getWorldPoint(this.scale.width / 2, this.scale.height / 2);
+    const preview = this.add
+      .image(start.x, start.y, item.icon)
+      .setOrigin(0.5, 1)
+      .setScale(item.scale)
+      .setAlpha(0.6)
+      .setDepth(999999);
+
+    // A single world-space (default scrollFactor — see GardenMazeScene's
+    // camera/scrollFactor postmortem for why NOT scrollFactor(0) here) capture
+    // rectangle spanning the whole world, at the highest depth, so it's always
+    // the topOnly hit — this is what stops a placement tap from ALSO landing
+    // on whatever animal/resource happens to be underneath it (previously: a
+    // placement click could simultaneously open a Request screen).
+    const capture = this.add
+      .rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, WORLD_WIDTH, WORLD_HEIGHT, 0x000000, 0.001)
+      .setDepth(999998)
+      .setInteractive({ useHandCursor: true });
+    capture.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      preview.setPosition(wp.x, wp.y);
+    });
+    capture.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+      if (this.registry.get("pointerOnUI")) return;
+      const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      this.confirmDecorPlacement(itemId, wp.x, wp.y);
+    });
+
+    const cancelBtn = makeIconButton(this, this.scale.width - 56, 56, "✕", 24, () => this.cancelDecorPlacement(), {
+      color: "#7a4d12",
+    })
+      .setScrollFactor(0)
+      .setDepth(1000000);
+    this.toast(`Tap a clear spot to place ${item.label}.`);
+    this.placement = { itemId, preview, cancelBtn, capture };
+  }
+
+  private cancelDecorPlacement(): void {
+    if (!this.placement) return;
+    this.placement.capture.destroy();
+    this.placement.preview.destroy();
+    this.placement.cancelBtn.destroy();
+    bus.emit("decor:placeCancelled", { itemId: this.placement.itemId });
+    this.placement = undefined;
+  }
+
+  /** Simple, approximate collision guard (Part N): reject a spot too close to
+   *  any animal, habitat resource, the Shop building, or another placed item —
+   *  not full bounding-box geometry, but enough to stop obviously-bad drops. */
+  private decorSpotIsClear(x: number, y: number): boolean {
+    const minDist = 90;
+    const tooClose = (px: number, py: number) => Math.hypot(px - x, py - y) < minDist;
+    if (x < 60 || y < 60 || x > WORLD_WIDTH - 60 || y > WORLD_HEIGHT - 60) return false;
+    for (const def of CATALOG) if (tooClose(def.garden_position.x, def.garden_position.y)) return false;
+    for (const h of HABITATS) for (const r of h.resources) if (tooClose(r.position.x, r.position.y)) return false;
+    if (this.shopBuilding && tooClose(this.shopBuilding.x, this.shopBuilding.y)) return false;
+    for (const p of shop.placedDecor()) if (tooClose(p.x, p.y)) return false;
+    return true;
+  }
+
+  private confirmDecorPlacement(itemId: string, x: number, y: number): void {
+    if (!this.decorSpotIsClear(x, y)) {
+      this.toast("Too close to something else — try another spot.");
+      return;
+    }
+    const placementId = shop.placeDecor(itemId, x, y);
+    if (!placementId) {
+      this.cancelDecorPlacement();
+      return;
+    }
+    this.spawnPlacedDecor(placementId, itemId, x, y);
+    Sfx.tap();
+    sparkleBurst(this, x, y, 12, 40);
+    this.placement?.preview.destroy();
+    this.placement?.cancelBtn.destroy();
+    this.placement?.capture.destroy();
+    this.placement = undefined;
+    bus.emit("decor:placed", { placementId, itemId, x, y });
+  }
+
   private teardown(): void {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
     this.offFns.forEach((fn) => fn());
@@ -1178,6 +1489,8 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.idles.forEach((i) => i.stop());
     this.idles.clear();
     this.views.clear();
+    this.resourceViews.clear();
+    this.lastCollectedAt.clear();
     this.regions.clear();
     this.screenObjects = [];
   }

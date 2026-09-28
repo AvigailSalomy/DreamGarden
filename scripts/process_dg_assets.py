@@ -24,20 +24,18 @@ Re-run any time; it's idempotent (reads SRC, never mutates it).
 import os
 import sys
 
-from PIL import Image, ImageFilter
-import numpy as np
-from scipy import ndimage
+from PIL import Image
+from bg_removal import remove_background, trim, downscale
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "Game_Assets_Dream_Garden")
 OUT = os.path.join(ROOT, "public", "assets", "dg")
 
 MAX_SIDE = 1100  # web-sane cap; Phaser scales further at render time
-SAT_THRESH = 26  # max-min channel spread below this = "background-ish"
-FEATHER = 1.6
 
 # Category folder -> output slug
 CATEGORY_SLUG = {
+    "ACCESSORIES": "accessories",
     "ANIMALS": "animals",
     "BRIDGES": "structures",
     "BUILDINGS": "structures",
@@ -74,52 +72,6 @@ def clean_name(folder: str, fname: str) -> str:
     if base.startswith("Gemini_Generated_Image"):
         return None  # sequential name assigned by caller
     return base.lower().replace(" ", "_")
-
-
-def remove_background(im: Image.Image) -> Image.Image:
-    """Vectorized equivalent of 'flood-fill from the border through background-ish
-    pixels': label connected components of the low-saturation mask, then drop only
-    the components that actually touch a border (so an enclosed white/grey patch
-    INSIDE the subject, e.g. a white belly, survives untouched)."""
-    im = im.convert("RGB")
-    arr = np.asarray(im).astype(np.int16)
-    maxc = arr.max(axis=2)
-    minc = arr.min(axis=2)
-    sat = maxc - minc
-    bgish = sat < SAT_THRESH
-
-    labels, n = ndimage.label(bgish, structure=np.ones((3, 3)))
-    h, w = bgish.shape
-    border_labels = set(labels[0, :]) | set(labels[-1, :]) | set(labels[:, 0]) | set(labels[:, -1])
-    border_labels.discard(0)
-
-    remove_mask = np.isin(labels, list(border_labels)) if border_labels else np.zeros_like(bgish)
-
-    alpha = np.where(remove_mask, 0, 255).astype(np.uint8)
-    a_img = Image.fromarray(alpha, mode="L").filter(ImageFilter.GaussianBlur(FEATHER))
-    out = im.convert("RGBA")
-    out.putalpha(a_img)
-    return out
-
-
-def trim(im: Image.Image, pad: int = 6) -> Image.Image:
-    bbox = im.getchannel("A").point(lambda p: 255 if p > 8 else 0).getbbox()
-    if not bbox:
-        return im
-    l, t, r, b = bbox
-    l = max(0, l - pad)
-    t = max(0, t - pad)
-    r = min(im.width, r + pad)
-    b = min(im.height, b + pad)
-    return im.crop((l, t, r, b))
-
-
-def downscale(im: Image.Image, max_side: int) -> Image.Image:
-    longest = max(im.width, im.height)
-    if longest <= max_side:
-        return im
-    ratio = max_side / longest
-    return im.resize((max(1, round(im.width * ratio)), max(1, round(im.height * ratio))), Image.LANCZOS)
 
 
 def process_one(path: str, out_path: str) -> tuple[int, int]:

@@ -15,26 +15,51 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    buildCozyBackdrop(this);
+    const backdrop = buildCozyBackdrop(this);
+    for (const obj of backdrop) {
+      const key = (obj as Phaser.GameObjects.Image).texture?.key;
+      if (["arch", "dead_shrub", "stump", "weeds", "flower"].includes(key)) obj.destroy();
+    }
 
     const W = this.scale.width;
     const H = this.scale.height;
     const inset = safeInsets();
     const resume = hasProgress();
+    // Reuse the garden production library to look through a living entrance.
+    const art = (key: string, x: number, y: number, height: number, depth: number) => {
+      const image = this.add.image(x, y, key).setOrigin(0.5, 1).setDepth(depth);
+      image.setScale(height / image.height);
+      return image;
+    };
+    art("dg_grass_ground", W / 2, H * 1.35, H, -79).setDisplaySize(W * 1.4, H);
+    art("dg_cottage_small_01", W * 0.68, H * 0.58, H * 0.27, -70);
+    art("dg_pond_restored_01", W * 0.5, H * 0.65, H * 0.23, -69);
+    for (const side of [-1, 1]) {
+      art("dg_tree_pink_01", W / 2 + side * W * 0.40, H * 0.61, H * 0.60, -68);
+      art("dg_bush_mixed_01", W / 2 + side * W * 0.37, H * 0.9, H * 0.38, -58);
+
+      art("dg_flowers_mixed_01", W / 2 + side * W * 0.41, H * 1.05, H * 0.32, -51);
+    }
+    art("dg_flower_arch_01", W / 2, H * 0.72, H * 0.69, -60);
+    const sign = this.add.graphics();
+    const sw = Math.min(530, W - 36), sy = H * 0.20;
+    sign.fillStyle(0x613d28).fillRoundedRect(W / 2 - sw / 2, sy - 44, sw, 93, 28);
+    sign.fillStyle(0xb77d48).fillRoundedRect(W / 2 - sw / 2 + 5, sy - 43, sw - 10, 80, 24);
+    sign.lineStyle(2, 0xe8b877, 0.7).strokeRoundedRect(W / 2 - sw / 2 + 10, sy - 37, sw - 20, 68, 20);
 
     this.add
-      .text(W / 2, H * 0.22, "DreamGarden", {
+      .text(W / 2, H * 0.20, "Dream Garden", {
         fontFamily: FONT_FAMILY,
         fontStyle: "700",
-        fontSize: `${Math.min(64, W * 0.122)}px`,
-        color: "#5b4636",
+        fontSize: `${Math.min(58, W * 0.115)}px`,
+        color: "#fff0c9",
       })
       .setOrigin(0.5)
       .setShadow(0, 3, "rgba(70,50,60,0.25)", 6);
 
     this.add
-      .text(W / 2, H * 0.22 + Math.min(52, W * 0.095), "a garden waiting to wake up", {
-        ...bodyStyle(Math.min(21, W * 0.044), "#6c5a48"),
+      .text(W / 2, H * 0.20 + 65, "a garden waiting to wake up", {
+        ...bodyStyle(Math.min(21, W * 0.044), "#fff3dc"),
       })
       .setOrigin(0.5);
 
@@ -42,17 +67,17 @@ export class MenuScene extends Phaser.Scene {
     const primaryW = Math.min(360, W - 96);
     new Button(this, W / 2, H * 0.66, {
       width: primaryW,
-      height: 104,
-      label: resume ? "Continue" : "Start Garden",
+      height: Math.min(90, H * 0.12),
+      label: resume ? "Continue" : "Start New Garden",
       fontSize: 34,
       onClick: () => this.enter(false),
     }).startPulse();
 
     // secondary — only when there is a garden to erase
     if (resume) {
-      new Button(this, W / 2, H * 0.66 + 128, {
+      new Button(this, W / 2, H * 0.66 + Math.min(108, H * 0.15), {
         width: primaryW,
-        height: 78,
+        height: Math.min(72, H * 0.10),
         label: "Start New Garden",
         variant: "cream",
         fontSize: 24,

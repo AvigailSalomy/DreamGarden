@@ -80,6 +80,58 @@ export class RequestsService {
     return { ok: true };
   }
 
+  /* ---------------- habitat-resource economy (data/resources.ts + data/habitats.ts) ---------------- */
+
+  resourceCount(resourceId: string): number {
+    return this.save.state.resources[resourceId] ?? 0;
+  }
+
+  /** Add to the real, persisted resource inventory — called when the player
+   *  taps a RESTORED resource source in the world (see GardenScene), or a future minigame reward. */
+  collectResource(resourceId: string, amount = 1): number {
+    const total = (this.save.state.resources[resourceId] ?? 0) + amount;
+    this.save.state.resources[resourceId] = total;
+    this.save.saveNow();
+    this.bus.emit("resource:collected", { resourceId, amount, total });
+    return total;
+  }
+
+  isSourceRestored(sourceId: string): boolean {
+    return !!this.save.state.restoredSources[sourceId];
+  }
+
+  /**
+   * Live progress toward restoring one habitat resource source — a real
+   * inventory count, not a fake UI number. This is the POST-rescue Request
+   * Page mechanic (data/habitats.ts RestorationResource), entirely separate
+   * from `purchase()` (the PRE-rescue, coin-based puzzle-unlock gate) — the
+   * two are never mixed.
+   */
+  restoreProgress(source: { id: string; produces: string; restoreCost: number }): { have: number; need: number } {
+    return { have: this.resourceCount(source.produces), need: source.restoreCost };
+  }
+
+  canRestoreSource(source: { id: string; produces: string; restoreCost: number }): boolean {
+    if (this.isSourceRestored(source.id)) return false;
+    const p = this.restoreProgress(source);
+    return p.have >= p.need;
+  }
+
+  /** Consume the resource cost and mark this specific world resource source
+   *  restored. Commits immediately — a real transaction, same as every other
+   *  save-truth change in this service. */
+  restoreSourceNow(source: { id: string; produces: string; restoreCost: number }): PurchaseResult {
+    if (this.isSourceRestored(source.id)) return { ok: false, reason: "already_owned" };
+    if (!this.canRestoreSource(source)) return { ok: false, reason: "insufficient_coins" };
+
+    this.save.state.resources[source.produces] -= source.restoreCost;
+    this.save.state.restoredSources[source.id] = true;
+    this.save.saveNow();
+
+    this.bus.emit("resourceSource:restored", { sourceId: source.id });
+    return { ok: true };
+  }
+
   private progressFor(objectId: string): MiniGameProgress {
     let p = this.save.state.minigame[objectId];
     if (!p) {

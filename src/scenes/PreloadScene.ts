@@ -1,3 +1,4 @@
+import { bakeBirdResourceFrames } from "../world/birdResourceFrames";
 import Phaser from "phaser";
 import { COLORS, FONT_FAMILY } from "../ui/theme";
 
@@ -38,7 +39,6 @@ export class PreloadScene extends Phaser.Scene {
     svg("crate", 200, 170);
     svg("pond_dry", 380, 200);
     svg("signpost", 150, 190);
-    svg("heart_dormant", 220, 240);
     svg("oak_dead", 340, 440);
 
     // cozy woodland trees (layered background + foreground framing)
@@ -53,8 +53,6 @@ export class PreloadScene extends Phaser.Scene {
     svg("fox", 220, 190); // Bunny Heist guard — no prior asset existed for this
     svg("bird", 150, 160);
     svg("bird_portrait", 900, 900);
-    svg("wildflower_bed", 320, 320);
-    svg("wildflowers_portrait", 900, 900);
 
     // letter system
     svg("envelope", 420, 310);
@@ -78,9 +76,6 @@ export class PreloadScene extends Phaser.Scene {
     svg("carrot_basket_prop", 160, 130);
     svg("soft_hay_prop", 180, 110);
     svg("clover_patch_prop", 170, 100);
-    svg("fresh_soil_prop", 180, 90);
-    svg("flower_seeds_prop", 170, 110);
-    svg("watering_supplies_prop", 150, 150);
     svg("bird_seeds_prop", 160, 100);
     svg("water_dish_prop", 150, 90);
     svg("cozy_perch_prop", 170, 130);
@@ -102,6 +97,56 @@ export class PreloadScene extends Phaser.Scene {
     dg("animals/fox");
     dg("animals/deer");
     dg("animals/hedgehog");
+    // square-padded puzzle variants (no distortion when sliced into a grid —
+    // see scripts that padded these, and RABBIT/BIRD's separate hand-drawn
+    // *_portrait SVGs, untouched, unrelated to this)
+    dg("animals/squirrel_puzzle");
+    dg("animals/fox_puzzle");
+    dg("animals/deer_puzzle");
+    dg("animals/hedgehog_puzzle");
+
+    // ---- habitat restoration resources (data/habitats.ts) — 6 animals x 3
+    // sources x 2 states, FINAL externally-supplied production art ----
+    for (const name of [
+      "rabbit_carrot_patch_damaged",
+      "rabbit_carrot_patch_restored",
+      "rabbit_herb_patch_damaged",
+      "rabbit_herb_patch_restored",
+      "rabbit_wildflower_patch_damaged",
+      "rabbit_wildflower_patch_restored",
+      "bird_blossom_tree_damaged",
+      "bird_blossom_tree_restored",
+      "bird_seed_feeder_damaged",
+      "bird_seed_feeder_restored",
+      "bird_water_lily_patch_damaged",
+      "bird_water_lily_patch_restored",
+      "hedgehog_mossy_log_damaged",
+      "hedgehog_mossy_log_restored",
+      "hedgehog_mushroom_log_damaged",
+      "hedgehog_mushroom_log_restored",
+      "hedgehog_herb_patch_damaged",
+      "hedgehog_herb_patch_restored",
+      "squirrel_acorn_oak_damaged",
+      "squirrel_acorn_oak_restored",
+      "squirrel_nut_cache_damaged",
+      "squirrel_nut_cache_restored",
+      "squirrel_apple_tree_damaged",
+      "squirrel_apple_tree_restored",
+      "fox_berry_vine_damaged",
+      "fox_berry_vine_restored",
+      "fox_fern_cluster_damaged",
+      "fox_fern_cluster_restored",
+      "fox_grape_vine_damaged",
+      "fox_grape_vine_restored",
+      "deer_moonflower_meadow_damaged",
+      "deer_moonflower_meadow_restored",
+      "deer_enchanted_berry_shrine_damaged",
+      "deer_enchanted_berry_shrine_restored",
+      "deer_enchanted_mushroom_ring_damaged",
+      "deer_enchanted_mushroom_ring_restored",
+    ]) {
+      dg(`resources/${name}`);
+    }
 
     dg("trees/tree_small_01");
     dg("trees/tree_medium_01");
@@ -152,6 +197,28 @@ export class PreloadScene extends Phaser.Scene {
     dg("terrain/terrain_04");
     dg("terrain/grass_ground"); // the supplied painted ground reference — the world's base terrain
 
+    // ---- Dream Garden Shop (data/shop.ts) — building + wearable accessories +
+    // Mystery Gift, processed via scripts/process_dg_assets.py ACCESSORIES ----
+    dg("accessories/shop_building");
+    dg("accessories/mystery_gift");
+    dg("accessories/accessory_garden_hat");
+    dg("accessories/accessory_flower_crown");
+    dg("accessories/accessory_round_glasses");
+    dg("accessories/accessory_glasses_nibs"); // rabbit-specific Round Glasses art — see shop.ts accessoryIconFor()
+    dg("accessories/accessory_flower_bow");
+    dg("accessories/accessory_magic_butterfly");
+    dg("accessories/accessory_magic_crown_rare");
+    // Simple "companion" accessories — float/sit beside the animal rather
+    // than needing precise anatomical wrapping (replaced Heart Glasses,
+    // Garden Scarf, Garden Backpack, which proved unreliable to fit).
+    dg("accessories/accessory_magic_balloon");
+    dg("accessories/accessory_flower_basket");
+    // Blue Bow (geometric twin of Flower Bow — same fits, different color)
+    // and Magic Wand (another beside-the-animal companion) replaced Round
+    // Glasses and Fairy Sparkles in the active catalog.
+    dg("accessories/accessory_blue_bow");
+    dg("accessories/accessory_magic_wand");
+
     // fx + ui
     svg("spark", 48, 48);
     svg("glow", 256, 256);
@@ -163,6 +230,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
+    bakeBirdResourceFrames(this);
     this.scene.start("Menu");
   }
 

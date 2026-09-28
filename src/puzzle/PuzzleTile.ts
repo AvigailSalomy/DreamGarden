@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { COLORS } from "../ui/theme";
 import { MIN_HIT } from "../ui/hit";
 import { Sfx } from "../fx/Sfx";
+import { pathToPoints } from "./jigsaw";
 
 export interface PuzzleTileOpts {
   /** Baked canvas texture of this jigsaw piece (already clipped to its cut shape). */
@@ -161,36 +162,3 @@ export class PuzzleTile extends Phaser.GameObjects.Container {
   }
 }
 
-/** Rough polyline from an SVG path string (M/L/Q/Z) for a stroke outline. */
-function pathToPoints(path: string): Phaser.Math.Vector2[] {
-  const pts: Phaser.Math.Vector2[] = [];
-  const tokens = path.trim().split(/\s+/);
-  let i = 0;
-  let cur = new Phaser.Math.Vector2(0, 0);
-  const num = () => parseFloat(tokens[i++]);
-  while (i < tokens.length) {
-    const cmd = tokens[i++];
-    if (cmd === "M" || cmd === "L") {
-      cur = new Phaser.Math.Vector2(num(), num());
-      pts.push(cur.clone());
-    } else if (cmd === "Q") {
-      const cxp = num();
-      const cyp = num();
-      const ex = num();
-      const ey = num();
-      for (let t = 0.25; t <= 1.0001; t += 0.25) {
-        const mt = 1 - t;
-        pts.push(
-          new Phaser.Math.Vector2(
-            mt * mt * cur.x + 2 * mt * t * cxp + t * t * ex,
-            mt * mt * cur.y + 2 * mt * t * cyp + t * t * ey,
-          ),
-        );
-      }
-      cur = new Phaser.Math.Vector2(ex, ey);
-    } else if (cmd === "Z") {
-      break;
-    }
-  }
-  return pts;
-}

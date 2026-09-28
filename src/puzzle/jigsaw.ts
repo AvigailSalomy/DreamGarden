@@ -129,6 +129,44 @@ export function piecePath(
   return cmds.join(" ");
 }
 
+/**
+ * Rough polyline from a piecePath() SVG path string (M/L/Q/Z) — the single
+ * source of truth for turning piece geometry into drawable points, shared by
+ * the movable piece's own outline (PuzzleTile), the board's matching slot
+ * recess, and the Hint system's glow (PuzzleBoard) — so a piece's cut and its
+ * destination's outline can never drift apart.
+ */
+export function pathToPoints(path: string): { x: number; y: number }[] {
+  const pts: { x: number; y: number }[] = [];
+  const tokens = path.trim().split(/\s+/);
+  let i = 0;
+  let cur = { x: 0, y: 0 };
+  const num = () => parseFloat(tokens[i++]);
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (cmd === "M" || cmd === "L") {
+      cur = { x: num(), y: num() };
+      pts.push({ ...cur });
+    } else if (cmd === "Q") {
+      const cxp = num();
+      const cyp = num();
+      const ex = num();
+      const ey = num();
+      for (let t = 0.25; t <= 1.0001; t += 0.25) {
+        const mt = 1 - t;
+        pts.push({
+          x: mt * mt * cur.x + 2 * mt * t * cxp + t * t * ex,
+          y: mt * mt * cur.y + 2 * mt * t * cyp + t * t * ey,
+        });
+      }
+      cur = { x: ex, y: ey };
+    } else if (cmd === "Z") {
+      break;
+    }
+  }
+  return pts;
+}
+
 /** How far the piece's outline reaches, relative to the base-cell CENTRE. */
 export function pieceBounds(
   edges: PieceEdges,

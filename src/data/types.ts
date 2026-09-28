@@ -145,11 +145,52 @@ export interface SaveState {
   requests: Record<string, string[]>;
   /** Per-object: Catch & Collect progress. */
   minigame: Record<string, MiniGameProgress>;
+  /**
+   * World-collected habitat resources (carrots, herbs, acorns, ...) — see
+   * data/resources.ts. A real accumulating inventory, not a fake UI number.
+   * Absent in saves from before this existed; migrate() defaults it to {}.
+   */
+  resources: Record<string, number>;
+  /**
+   * Per-resource-source restoration state (see data/habitats.ts) — keyed by
+   * RestorationResource.id. True once that specific world resource has been
+   * restored; independent of the owning animal's overall unlock state, so a
+   * habitat can improve gradually rather than flipping all-or-nothing.
+   * Absent in older saves; migrate() defaults it to {}.
+   */
+  restoredSources: Record<string, boolean>;
   stats: {
     puzzlesSolved: number;
     startedAt: number;
     lastPlayed: number;
   };
+  /** Personalization/customization layer — separate from the restoration
+   *  system above. See data/shop.ts + core/ShopService.ts. */
+  shop: ShopSaveState;
+}
+
+/** One decoration the player has placed in the world (Part N). */
+export interface PlacedDecor {
+  placementId: string;
+  itemId: string;
+  x: number;
+  y: number;
+}
+
+export interface ShopSaveState {
+  /** True once the Shop building is interactive — set after Nibs's first rescue. */
+  unlocked: boolean;
+  /** Calendar date ("YYYY-MM-DD", local) the current Daily selection was rolled
+   *  for — reopening the Shop the same day must show the same six items. */
+  dailyDate: string;
+  dailyItemIds: string[];
+  /** Decor bought but not yet placed, itemId -> count. */
+  decorInventory: Record<string, number>;
+  placedDecor: PlacedDecor[];
+  ownedAccessories: string[];
+  /** animalId -> slot -> accessoryId currently worn in that slot. */
+  equippedAccessories: Record<string, Record<string, string>>;
+  mysteryGiftsOpened: number;
 }
 
 export interface MiniGameProgress {

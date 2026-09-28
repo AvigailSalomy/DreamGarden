@@ -1,30 +1,22 @@
 import type { RegionId } from "./types";
 
 /**
- * The world-restoration layer: which garden-world RESOURCES belong to which
- * animal's habitat, and what condition unlocks each one's restored state.
+ * The world-restoration layer: which garden-world RESOURCE SOURCES belong to
+ * which animal's habitat, their real damaged/restored production-art pair,
+ * what they produce, and what restores them.
  *
- * This is deliberately separate from `GardenObjectDef.requests` (data/objects.ts) —
- * that system already handles "buy a request, its prop appears in the world" and
- * is untouched here. `HabitatDef`/`RestorationResource` describe the SURROUNDING
- * ENVIRONMENT each animal's habitat lives in: the resources that read as damaged
- * on a fresh save (a dry flower patch, a cracked fountain, an unlit lantern) and
- * swap to their real production-art restored counterpart once their
- * `requirement` is met — reusing EXISTING progression/requests state as the
- * source of truth (no new save fields; see `ResourceRequirement`).
+ * All 18 source images here are FINAL, externally-supplied production assets
+ * (Game_Assets_Dream_Garden/{RABBIT,BIRD,HEDGEHOG,SQUIRREL,FOX,DEER}/) —
+ * genuine structural damaged↔restored pairs, not tints. Filenames below are
+ * exactly what was supplied; do not rename.
  *
- * Only the three real catalog entries (rabbit, wildflowers, bird — see
- * data/objects.ts CATALOG) get a habitat. The ambient wildlife GardenScene
- * places for atmosphere (hedgehog/squirrel/fox/deer) are NOT in progression —
- * they are decorative, not rescuable, and intentionally have no habitat entry
- * here (inventing one would fabricate progression state that doesn't exist).
+ * State lives entirely in EXISTING save fields (SaveState.restoredSources,
+ * SaveState.resources — both added alongside this file) — no parallel
+ * progression system. A source's restored/damaged state is independent of
+ * its owning animal's overall unlock state (see SaveState.restoredSources):
+ * an animal can be rescued while its habitat is still mostly damaged, and
+ * the habitat improves gradually as each source is individually restored.
  */
-
-export type ResourceRequirement =
-  | { kind: "objectUnlocked"; objectId: string }
-  | { kind: "requestPurchased"; objectId: string; requestId: string }
-  /** The garden-wide capstone: every catalog object currently unlocked. */
-  | { kind: "allUnlocked" };
 
 export interface RestorationResource {
   id: string;
@@ -32,33 +24,26 @@ export interface RestorationResource {
   position: { x: number; y: number };
   scale: number;
   shadowW?: number;
-  /**
-   * `dg_`-prefixed production texture key shown before restoration. Omitted
-   * when the resource's "damaged" state is its ABSENCE from the world (a
-   * real, honest alternative to faking damage art that doesn't exist —
-   * see the report's "no damaged counterpart supplied" list).
-   */
-  damagedAsset?: string;
+  /** `dg_`-prefixed production texture key shown before restoration. */
+  damagedAsset: string;
   /** `dg_`-prefixed production texture key shown once restored. */
   restoredAsset: string;
+  /** Resource id (data/resources.ts) this source produces once restored. */
+  produces: string;
   /**
-   * True for the one resource in a habitat where no damaged/restored ASSET
-   * PAIR was available at all, and a tint is used as the only stand-in
-   * (documented explicitly, never silently) — currently just the cottage
-   * lantern (dim/cool -> its own true colours), since only one lantern
-   * sprite was supplied.
+   * Required inventory for an explicit post-rescue restoration. Acquisition
+   * is routed independently through the Request screen's Get / Play action.
    */
-  tintOnly?: boolean;
-  requirement: ResourceRequirement;
+  restoreCost: number;
 }
 
 export interface HabitatDef {
   id: string;
-  /** Owning catalog object id, or null for the fountain (owned by no single
-   *  animal — a whole-garden capstone landmark). */
-  animalId: string | null;
+  animalId: string;
   name: string;
   region: RegionId;
+  /** Where the animal itself lives/roams in this habitat. */
+  homePosition: { x: number; y: number };
   resources: RestorationResource[];
 }
 
@@ -67,89 +52,282 @@ export const RABBIT_HABITAT: HabitatDef = {
   animalId: "rabbit",
   name: "Rabbit's Meadow",
   region: "animalMeadow",
+  homePosition: { x: 900, y: 1500 },
   resources: [
     {
-      id: "meadowBloom",
-      label: "Wild meadow flowers",
-      position: { x: 1140, y: 1580 },
-      scale: 0.19,
-      // damaged state = absence (the meadow's existing dead_shrub/weeds already
-      // carry the "neglected" read — see buildProps) — no separate damaged
-      // asset was needed for this one.
-      restoredAsset: "flowers_yellow_01",
-      requirement: { kind: "objectUnlocked", objectId: "rabbit" },
+      id: "rabbit_carrot_patch",
+      label: "Carrot Patch",
+      position: { x: 1080, y: 1600 },
+      scale: 0.202,
+      shadowW: 160,
+      damagedAsset: "rabbit_carrot_patch_damaged",
+      restoredAsset: "rabbit_carrot_patch_restored",
+      produces: "carrot",
+      restoreCost: 5,
     },
-  ],
-};
-
-export const WILDFLOWER_HABITAT: HabitatDef = {
-  id: "wildflowerBed",
-  animalId: "wildflowers",
-  name: "Wildflower Bed",
-  region: "flowerBed",
-  resources: [
     {
-      id: "flowerBedGrowth",
-      label: "The flower bed itself",
-      position: { x: 260, y: 1560 },
-      scale: 0.22,
-      // both real, distinct production-art photos of the RESTORATION folder —
-      // not an officially-named pair, but genuinely two different states.
-      damagedAsset: "vegetation_04",
-      restoredAsset: "vegetation_01",
-      requirement: { kind: "objectUnlocked", objectId: "wildflowers" },
+      id: "rabbit_herb_patch",
+      label: "Herb Patch",
+      position: { x: 760, y: 1560 },
+      scale: 0.182,
+      shadowW: 140,
+      damagedAsset: "rabbit_herb_patch_damaged",
+      restoredAsset: "rabbit_herb_patch_restored",
+      produces: "herb",
+      restoreCost: 3,
+    },
+    {
+      id: "rabbit_wildflower_patch",
+      label: "Wildflower Patch",
+      position: { x: 990, y: 1350 },
+      scale: 0.163,
+      shadowW: 120,
+      damagedAsset: "rabbit_wildflower_patch_damaged",
+      restoredAsset: "rabbit_wildflower_patch_restored",
+      produces: "wildflower",
+      restoreCost: 4,
     },
   ],
 };
 
 export const BIRD_HABITAT: HabitatDef = {
-  id: "birdCottage",
+  id: "birdGarden",
   animalId: "bird",
-  name: "Pip's Cottage Garden",
+  name: "Pip's Blossom Water Garden",
   region: "cottageYard",
+  homePosition: { x: 1750, y: 1182 },
   resources: [
     {
-      id: "cottageLantern",
-      label: "The cottage lantern",
-      position: { x: 1860, y: 1280 },
-      scale: 0.22,
-      restoredAsset: "lantern_01",
-      tintOnly: true, // see RestorationResource.tintOnly — no unlit-lantern asset exists
-      requirement: { kind: "objectUnlocked", objectId: "bird" },
+      id: "bird_blossom_tree",
+      label: "Blossom Tree",
+      position: { x: 1700, y: 1110 },
+      scale: 0.192,
+      shadowW: 170,
+      damagedAsset: "bird_blossom_tree_damaged",
+      restoredAsset: "bird_blossom_tree_restored",
+      produces: "blossom",
+      restoreCost: 5,
     },
     {
-      id: "cottageDoorstepFlowers",
-      label: "Flowers by the cottage door",
-      position: { x: 2100, y: 1300 },
-      scale: 0.17,
-      restoredAsset: "flowers_pink_01",
-      requirement: { kind: "objectUnlocked", objectId: "bird" },
+      id: "bird_seed_feeder",
+      label: "Seed Feeder",
+      position: { x: 1600, y: 1280 },
+      scale: 0.144,
+      shadowW: 90,
+      damagedAsset: "bird_seed_feeder_damaged",
+      restoredAsset: "bird_seed_feeder_restored",
+      produces: "seed",
+      restoreCost: 5,
+    },
+    {
+      id: "bird_water_lily_patch",
+      label: "Water Lily Patch",
+      position: { x: 1900, y: 1320 },
+      scale: 0.192,
+      shadowW: 150,
+      damagedAsset: "bird_water_lily_patch_damaged",
+      restoredAsset: "bird_water_lily_patch_restored",
+      produces: "water_lily",
+      restoreCost: 5,
     },
   ],
 };
 
-/**
- * Not owned by a single rescued animal — the garden-wide capstone landmark.
- * pondside has no catalog entry of its own (see the report), so rather than
- * invent a fourth fake progression object, its restoration rides the one
- * honest signal that already exists: the whole visible garden being restored.
- */
-export const FOUNTAIN_LANDMARK: HabitatDef = {
-  id: "fountainClearing",
-  animalId: null,
-  name: "The Fountain Clearing",
-  region: "pondside",
+export const HEDGEHOG_HABITAT: HabitatDef = {
+  id: "hedgehogNook",
+  animalId: "hedgehog",
+  name: "Hedgehog's Wild Herb & Mushroom Nook",
+  region: "animalMeadow",
+  // Moved well clear of Wildflowers' garden_position (470,1652) — its
+  // taskGhost preview marker (a large, dim, tinted silhouette shown while
+  // Wildflowers is the CURRENT task) has a bounding box wide enough to have
+  // visually intruded on this habitat at its old, too-close position. That
+  // ghost is pre-existing, correct behaviour; the fix is giving this habitat
+  // its own clear footprint, not touching the marker itself.
+  homePosition: { x: 560, y: 2080 },
   resources: [
     {
-      id: "fountain",
-      label: "The stone fountain",
-      position: { x: 1540, y: 1980 },
-      scale: 0.62,
-      damagedAsset: "pond_damaged_01",
-      restoredAsset: "pond_restored_01",
-      requirement: { kind: "allUnlocked" },
+      id: "hedgehog_mossy_log",
+      label: "Mossy Log",
+      position: { x: 400, y: 2140 },
+      scale: 0.163,
+      shadowW: 150,
+      damagedAsset: "hedgehog_mossy_log_damaged",
+      restoredAsset: "hedgehog_mossy_log_restored",
+      produces: "moss",
+      restoreCost: 5,
+    },
+    {
+      id: "hedgehog_mushroom_log",
+      label: "Mushroom Log",
+      position: { x: 740, y: 2180 },
+      scale: 0.154,
+      shadowW: 140,
+      damagedAsset: "hedgehog_mushroom_log_damaged",
+      restoredAsset: "hedgehog_mushroom_log_restored",
+      produces: "mushroom",
+      restoreCost: 5,
+    },
+    {
+      id: "hedgehog_herb_patch",
+      label: "Herb Patch",
+      position: { x: 720, y: 1950 },
+      scale: 0.154,
+      shadowW: 130,
+      damagedAsset: "hedgehog_herb_patch_damaged",
+      restoredAsset: "hedgehog_herb_patch_restored",
+      produces: "herb",
+      restoreCost: 5,
     },
   ],
 };
 
-export const HABITATS: HabitatDef[] = [RABBIT_HABITAT, WILDFLOWER_HABITAT, BIRD_HABITAT, FOUNTAIN_LANDMARK];
+export const SQUIRREL_HABITAT: HabitatDef = {
+  id: "squirrelGrove",
+  animalId: "squirrel",
+  name: "Squirrel's Acorn Woodland Grove",
+  region: "treeGrove",
+  homePosition: { x: 2380, y: 1420 },
+  resources: [
+    {
+      id: "squirrel_acorn_oak",
+      label: "Acorn Oak",
+      position: { x: 2190, y: 1340 },
+      scale: 0.192,
+      shadowW: 170,
+      damagedAsset: "squirrel_acorn_oak_damaged",
+      restoredAsset: "squirrel_acorn_oak_restored",
+      produces: "acorn",
+      restoreCost: 5,
+    },
+    {
+      id: "squirrel_nut_cache",
+      label: "Nut Cache",
+      position: { x: 2570, y: 1510 },
+      scale: 0.144,
+      shadowW: 120,
+      damagedAsset: "squirrel_nut_cache_damaged",
+      restoredAsset: "squirrel_nut_cache_restored",
+      produces: "nut",
+      restoreCost: 5,
+    },
+    {
+      id: "squirrel_apple_tree",
+      label: "Apple Tree",
+      position: { x: 2170, y: 1580 },
+      scale: 0.182,
+      shadowW: 160,
+      damagedAsset: "squirrel_apple_tree_damaged",
+      restoredAsset: "squirrel_apple_tree_restored",
+      produces: "apple",
+      restoreCost: 5,
+    },
+  ],
+};
+
+export const FOX_HABITAT: HabitatDef = {
+  id: "foxWoodland",
+  animalId: "fox",
+  name: "Fox's Fern & Berry Woodland",
+  region: "treeGrove",
+  homePosition: { x: 2820, y: 1620 },
+  resources: [
+    {
+      id: "fox_berry_vine",
+      label: "Berry Vine",
+      position: { x: 3020, y: 1540 },
+      scale: 0.173,
+      shadowW: 140,
+      damagedAsset: "fox_berry_vine_damaged",
+      restoredAsset: "fox_berry_vine_restored",
+      produces: "berry",
+      restoreCost: 5,
+    },
+    {
+      id: "fox_fern_cluster",
+      label: "Fern Cluster",
+      position: { x: 2600, y: 1740 },
+      scale: 0.163,
+      shadowW: 130,
+      damagedAsset: "fox_fern_cluster_damaged",
+      restoredAsset: "fox_fern_cluster_restored",
+      produces: "fern",
+      restoreCost: 5,
+    },
+    {
+      id: "fox_grape_vine",
+      label: "Grape Vine",
+      position: { x: 2900, y: 1740 },
+      scale: 0.144,
+      shadowW: 110,
+      damagedAsset: "fox_grape_vine_damaged",
+      restoredAsset: "fox_grape_vine_restored",
+      produces: "grape",
+      restoreCost: 5,
+    },
+  ],
+};
+
+export const DEER_HABITAT: HabitatDef = {
+  id: "deerClearing",
+  animalId: "deer",
+  name: "Deer's Enchanted Clearing",
+  region: "farmCorner",
+  homePosition: { x: 2680, y: 1020 },
+  resources: [
+    {
+      id: "deer_moonflower_meadow",
+      label: "Moonflower Meadow",
+      position: { x: 2470, y: 960 },
+      scale: 0.192,
+      shadowW: 160,
+      damagedAsset: "deer_moonflower_meadow_damaged",
+      restoredAsset: "deer_moonflower_meadow_restored",
+      produces: "moonflower",
+      restoreCost: 5,
+    },
+    {
+      id: "deer_enchanted_berry_shrine",
+      label: "Enchanted Berry Shrine",
+      position: { x: 2870, y: 820 },
+      scale: 0.173,
+      shadowW: 150,
+      damagedAsset: "deer_enchanted_berry_shrine_damaged",
+      restoredAsset: "deer_enchanted_berry_shrine_restored",
+      produces: "enchanted_berry",
+      restoreCost: 5,
+    },
+    {
+      id: "deer_enchanted_mushroom_ring",
+      label: "Enchanted Mushroom Ring",
+      position: { x: 2660, y: 1210 },
+      scale: 0.154,
+      shadowW: 130,
+      damagedAsset: "deer_enchanted_mushroom_ring_damaged",
+      restoredAsset: "deer_enchanted_mushroom_ring_restored",
+      produces: "enchanted_mushroom",
+      restoreCost: 5,
+    },
+  ],
+};
+
+export const HABITATS: HabitatDef[] = [
+  RABBIT_HABITAT,
+  BIRD_HABITAT,
+  HEDGEHOG_HABITAT,
+  SQUIRREL_HABITAT,
+  FOX_HABITAT,
+  DEER_HABITAT,
+];
+
+export function habitatFor(animalId: string): HabitatDef | undefined {
+  return HABITATS.find((h) => h.animalId === animalId);
+}
+
+export function sourceById(sourceId: string): RestorationResource | undefined {
+  for (const h of HABITATS) {
+    const r = h.resources.find((res) => res.id === sourceId);
+    if (r) return r;
+  }
+  return undefined;
+}

@@ -1,5 +1,19 @@
 import { SAVE_KEY, SAVE_VERSION, STARTING_COINS } from "../game/config";
-import type { SaveState } from "../data/types";
+import type { SaveState, ShopSaveState } from "../data/types";
+import { CATALOG } from "../data/objects";
+
+function freshShopState(): ShopSaveState {
+  return {
+    unlocked: false,
+    dailyDate: "",
+    dailyItemIds: [],
+    decorInventory: {},
+    placedDecor: [],
+    ownedAccessories: [],
+    equippedAccessories: {},
+    mysteryGiftsOpened: 0,
+  };
+}
 
 export function freshSave(): SaveState {
   const now = Date.now();
@@ -13,7 +27,10 @@ export function freshSave(): SaveState {
     objects: {},
     requests: {},
     minigame: {},
+    resources: {},
+    restoredSources: {},
     stats: { puzzlesSolved: 0, startedAt: now, lastPlayed: now },
+    shop: freshShopState(),
   };
 }
 
@@ -28,16 +45,28 @@ export function migrate(data: unknown): SaveState {
   if (!data || typeof data !== "object") return base;
   const d = data as Partial<SaveState>;
 
-  const objects = d.objects && typeof d.objects === "object" ? d.objects : {};
+  const rawObjects = d.objects && typeof d.objects === "object" ? d.objects : {};
+  // Drop any stale per-object progress for ids no longer in CATALOG — in
+  // particular a pre-existing save's "wildflowers" entry (the standalone
+  // Wildflowers progression task was removed; a save from before that removal
+  // must never let a leftover entry for it affect anything going forward).
+  const catalogIds = new Set(CATALOG.map((o) => o.id));
+  const objects = Object.fromEntries(Object.entries(rawObjects).filter(([id]) => catalogIds.has(id)));
   const hadProgress =
     (typeof d.currentTaskIndex === "number" && d.currentTaskIndex > 0) ||
     Object.keys(objects).length > 0;
 
+  // currentTaskIndex is DERIVED, not trusted verbatim: a raw stored index can
+  // point at the wrong animal after CATALOG's shape changes (exactly what
+  // removing the Wildflowers slot did to every existing save — its index and
+  // everything after it shifted down by one). The correct index is always
+  // "how many CATALOG animals, in order, are already unlocked".
+  const currentTaskIndex = CATALOG.findIndex((o) => !objects[o.id]?.is_unlocked);
+
   return {
     saveVersion: SAVE_VERSION,
     coins: typeof d.coins === "number" ? d.coins : base.coins,
-    currentTaskIndex:
-      typeof d.currentTaskIndex === "number" ? d.currentTaskIndex : base.currentTaskIndex,
+    currentTaskIndex: currentTaskIndex === -1 ? CATALOG.length : currentTaskIndex,
     introSeen: !!d.introSeen,
     openingGardenTourSeen: !!d.openingGardenTourSeen || hadProgress,
     lettersSeen:
@@ -45,7 +74,16 @@ export function migrate(data: unknown): SaveState {
     objects,
     requests: d.requests && typeof d.requests === "object" ? d.requests : {},
     minigame: d.minigame && typeof d.minigame === "object" ? d.minigame : {},
+    // absent in any save from before the habitat-resource system existed —
+    // defaults to empty, never corrupts/loses older progress
+    resources: d.resources && typeof d.resources === "object" ? d.resources : {},
+    restoredSources:
+      d.restoredSources && typeof d.restoredSources === "object" ? d.restoredSources : {},
     stats: { ...base.stats, ...(d.stats ?? {}) },
+    shop: {
+      ...base.shop,
+      ...(d.shop && typeof d.shop === "object" ? d.shop : {}),
+    },
   };
 }
 

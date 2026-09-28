@@ -40,12 +40,35 @@ export class RevealSequencer {
       await host.camera.focusOn(dest.x, dest.y - 60, 850, 1);
       await wait(scene, 120);
 
-      // 3. the object arrives — into exactly the silhouette's footprint
+      // Animals already live here. Rescue celebrates the same visible resident;
+      // only non-animal restorations use a silhouette/entrance transition.
       Sfx.fanfare();
-      view = host.spawnObjectView(def, true);
-      const preset = ENTRANCE_PRESETS[def.reveal_animation] ?? ENTRANCE_PRESETS.hop_in;
-      await preset.run(host, view, dest);
-      host.fadeTaskGhost(); // shadow -> exact object, same spot
+      if (def.category === "animal") {
+        host.pauseIdle(def.id);
+        view = host.spawnObjectView(def, false);
+        view.setHopHeight(0);
+        view.body.setScale(1).setAngle(0);
+        // silhouette -> real animal, in the exact same footprint
+        await host.revealAnimalSilhouette(def.id);
+        sparkleBurst(scene, dest.x, dest.y - view.body.displayHeight * 0.5, 16, 55);
+        const resident = view;
+        await new Promise<void>((resolve) => {
+          scene.tweens.add({
+            targets: resident.body,
+            y: -14 / resident.baseScaleValue,
+            duration: 250,
+            yoyo: true,
+            repeat: 1,
+            ease: "Sine.easeInOut",
+            onComplete: () => resolve(),
+          });
+        });
+      } else {
+        view = host.spawnObjectView(def, true);
+        const preset = ENTRANCE_PRESETS[def.reveal_animation] ?? ENTRANCE_PRESETS.hop_in;
+        await preset.run(host, view, dest);
+        host.fadeTaskGhost();
+      }
       scene.tweens.add({ targets: glow, alpha: 0, scale: 0.4, duration: 500 });
 
       // 4. the garden reacts
