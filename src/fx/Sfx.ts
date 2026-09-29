@@ -24,6 +24,11 @@ class SfxEngine {
     return this.ctx;
   }
 
+  /** The shared AudioContext (created on first use) — Music plays through this same one. */
+  context(): AudioContext | null {
+    return this.ensure();
+  }
+
   /** Call once from a pointer/touch handler so mobile browsers unlock audio. */
   unlock(): void {
     this.ensure();

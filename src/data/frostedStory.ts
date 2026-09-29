@@ -451,6 +451,33 @@ export const PUZZLE_TUTORIAL: StoryNoteDef = {
   once: true,
 };
 
+/**
+ * The Winter Market introduction. Shown right after the Rabbit is a real,
+ * active animal — the Rabbit is what makes the market's TRY IT OUT useful, so
+ * this is the natural moment to say "there's a shop now" and walk the player
+ * in. Then, once inside, a short how-it-works tutorial.
+ */
+export const SHOP_INTRO: StoryNoteDef = {
+  id: "shop_intro_seen",
+  kind: "story",
+  title: "🛍️ The Winter Market is open!",
+  body: "Your bunny is home, and the little market in the village has opened its doors.\n\nDress your friends up and decorate the valley with your coins!",
+  button: "Take me there",
+  once: true,
+};
+
+export const SHOP_TUTORIAL: StoryNoteDef = {
+  id: "shop_tutorial_seen",
+  kind: "tutorial",
+  title: "🪙 How the Market works",
+  body: "Spend your coins here. Only things you can afford are ready to use.\n\n🏠 Buildings, plants & decorations: press a card and drag it into the valley, then let go to place it.\n\n🐾 TRY IT OUT: tap an accessory to see it on your friend. It's free until you press BUY.",
+  button: "Got it",
+  once: true,
+};
+
+/** Shown when the market is tapped before the first friend is home. */
+export const SHOP_LOCKED_HINT = "The market opens once your first friend is home";
+
 /** Caption over the finished puzzle as the living-artwork beat begins. */
 export const LIVING_ART_CAPTION = "✨ The picture is coming to life...";
 

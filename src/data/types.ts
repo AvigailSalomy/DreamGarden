@@ -263,7 +263,7 @@ export interface FrostedValleySaveState {
 export type FrostedShopCategory = "building" | "pet" | "plant" | "decoration";
 
 /** Where a "pet" category item attaches on an animal's portrait, as a fraction of its displayed width/height. */
-export type FrostedShopAnchor = "head" | "face" | "neck";
+export type FrostedShopAnchor = "head" | "face" | "neck" | "collar";
 
 /** One purchasable Shop item — reuses a real, already-painted piece of Frosted Valley art. */
 export interface FrostedShopItemDef {

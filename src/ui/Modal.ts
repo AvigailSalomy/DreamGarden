@@ -4,6 +4,7 @@ import { makePanel } from "./Panel";
 import { Button } from "./Button";
 import { makeIconButton } from "./hit";
 import { Sfx } from "../fx/Sfx";
+import { Music } from "../fx/Music";
 
 interface ConfirmOpts {
   title: string;
@@ -29,7 +30,7 @@ export function confirmModal(scene: Phaser.Scene, o: ConfirmOpts): void {
   layer.add(scrim);
 
   const panelW = Math.min(W - 48, 520);
-  const panelH = 300;
+  const panelH = 390;
   const card = scene.add.container(W / 2, H / 2).setDepth(1);
   card.add(makePanel(scene, panelW, panelH));
   card.add(
@@ -88,7 +89,7 @@ interface SettingsOpts {
   onStartNew: () => void;
 }
 
-/** Small settings sheet: sound toggle + start-new-garden. */
+/** Small settings sheet: sound + music toggles (independent) + start-new-garden. */
 export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
   const W = scene.scale.width;
   const H = scene.scale.height;
@@ -102,7 +103,7 @@ export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
   layer.add(scrim);
 
   const panelW = Math.min(W - 48, 480);
-  const panelH = 300;
+  const panelH = 390;
   const card = scene.add.container(W / 2, H / 2);
   card.add(makePanel(scene, panelW, panelH));
   card.add(
@@ -114,7 +115,7 @@ export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
     layer.destroy();
   };
 
-  const soundBtn = new Button(scene, 0, -40, {
+  const soundBtn = new Button(scene, 0, -70, {
     width: panelW - 80,
     height: 70,
     label: Sfx.enabled ? "Sound: On" : "Sound: Off",
@@ -128,8 +129,22 @@ export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
   });
   card.add(soundBtn);
 
+  const musicBtn = new Button(scene, 0, 20, {
+    width: panelW - 80,
+    height: 70,
+    label: Music.enabled ? "Music: On" : "Music: Off",
+    variant: "cream",
+    fontSize: 22,
+    onClick: () => {
+      Music.setEnabled(!Music.enabled);
+      Sfx.tap();
+      musicBtn.setLabel(Music.enabled ? "Music: On" : "Music: Off");
+    },
+  });
+  card.add(musicBtn);
+
   card.add(
-    new Button(scene, 0, 52, {
+    new Button(scene, 0, 110, {
       width: panelW - 80,
       height: 70,
       label: "Start New Garden",

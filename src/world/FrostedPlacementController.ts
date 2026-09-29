@@ -51,6 +51,7 @@ export class FrostedPlacementController {
   private onConfirmCb?: (x: number, y: number, rotation: number) => void;
   private onCancelCb?: () => void;
   private dragToPlace = false;
+  private press = { x: 0, y: 0, t: 0 };
 
   constructor(private scene: Phaser.Scene) {}
 
@@ -68,6 +69,8 @@ export class FrostedPlacementController {
     this.x = opts.startX;
     this.y = opts.startY;
     this.dragToPlace = opts.dragToPlace ?? false;
+    const ptr = this.scene.input.activePointer;
+    this.press = { x: ptr.x, y: ptr.y, t: this.scene.time.now };
 
     this.scene.registry.set("pointerOnUI", true);
 
@@ -79,6 +82,7 @@ export class FrostedPlacementController {
     this.scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.handlePointer, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.handlePointer, this);
     if (this.dragToPlace) this.scene.input.on(Phaser.Input.Events.POINTER_UP, this.handleDragRelease, this);
+    this.scene.input.keyboard?.on("keydown-ESC", this.handleEscape, this);
 
     this.buildToolbar();
     this.repositionToolbar();
@@ -102,12 +106,45 @@ export class FrostedPlacementController {
     cb?.(x, y, rotation);
   }
 
-  /** dragToPlace mode: whatever the pointer is doing when it's released IS the decision — no separate confirm tap. */
+  private handleEscape = (): void => {
+    this.cancel();
+  };
+
+  /**
+   * dragToPlace mode: letting go over a VALID spot places it right there. A
+   * plain click (no real drag) or a release over an invalid spot never buys
+   * anything and never silently throws the item away: the ghost stays in the
+   * ordinary tap-to-move mode (with ✕ / ⟳ / ✓) so the player can pick a clear
+   * spot, and nothing is charged until ✓ / a valid drop.
+   */
   private handleDragRelease = (): void => {
     if (!this._active) return;
+    const p = this.scene.input.activePointer;
+    const dragged = Math.hypot(p.x - this.press.x, p.y - this.press.y) > 16 || this.scene.time.now - this.press.t > 350;
+    if (!dragged) {
+      // a click on the shop card: start from the middle of the view instead of buying under the card
+      const cam = this.scene.cameras.main;
+      const c = cam.getWorldPoint(this.scene.scale.width / 2, this.scene.scale.height / 2);
+      this.x = c.x;
+      this.y = c.y;
+      this.ghost?.setPosition(this.x, this.y).setDepth(this.y);
+      this.enterTapMode("Tap where it should go, then ✓");
+      return;
+    }
     if (this.isValidFn(this.x, this.y)) this.confirm();
-    else this.cancel();
+    else this.enterTapMode("Can't place it there — tap a clear spot, then ✓");
   };
+
+  /** Drop the drag-and-release behaviour and continue as tap-to-move-then-confirm. */
+  private enterTapMode(message: string): void {
+    this.dragToPlace = false;
+    this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.handleDragRelease, this);
+    this.toolbar?.destroy();
+    this.confirmBtn = undefined;
+    this.buildToolbar(message);
+    this.repositionToolbar();
+    this.refreshValidity();
+  }
 
   private rotate(): void {
     if (!this.ghost) return;
@@ -117,6 +154,8 @@ export class FrostedPlacementController {
 
   private handlePointer = (p: Phaser.Input.Pointer): void => {
     if (!this.ghost) return;
+    // pressing the ✕ / ⟳ / ✓ toolbar must not drag the ghost down onto the toolbar itself
+    if (!this.dragToPlace && p.y > this.scene.scale.height - 150) return;
     const world = this.scene.cameras.main.getWorldPoint(p.x, p.y);
     this.x = world.x;
     this.y = world.y;
@@ -141,7 +180,7 @@ export class FrostedPlacementController {
    * approach rendered the toolbar shrunk and dragged toward the zoom focal
    * point — nowhere near where a player would actually tap.
    */
-  private buildToolbar(): void {
+  private buildToolbar(message?: string): void {
     this.toolbar = this.scene.add.container(0, 0).setDepth(10000);
 
     if (this.dragToPlace) {
@@ -156,6 +195,7 @@ export class FrostedPlacementController {
           color: "#fef6e8",
         })
         .setOrigin(0.5)
+        .setStroke("#5b4636", 4)
         .setShadow(0, 2, "rgba(0,0,0,0.4)", 3);
       this.toolbar.add(dragHint);
       return;
@@ -179,13 +219,14 @@ export class FrostedPlacementController {
     this.confirmBtn = confirmBtn;
 
     const hint = this.scene.add
-      .text(0, -62, "Tap to move  ·  ⟳ rotate  ·  ✓ confirm", {
+      .text(0, -62, message ?? "Tap to move  ·  ⟳ rotate  ·  ✓ confirm", {
         fontFamily: '"Baloo 2", system-ui, sans-serif',
         fontSize: "15px",
         fontStyle: "600",
         color: "#fef6e8",
       })
       .setOrigin(0.5)
+      .setStroke("#5b4636", 4)
       .setShadow(0, 2, "rgba(0,0,0,0.4)", 3);
 
     this.toolbar.add([cancelBtn, rotateBtn, confirmBtn, hint]);
@@ -207,6 +248,7 @@ export class FrostedPlacementController {
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.handlePointer, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.handlePointer, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.handleDragRelease, this);
+    this.scene.input.keyboard?.off("keydown-ESC", this.handleEscape, this);
     this.scene.events.off(Phaser.Scenes.Events.UPDATE, this.repositionToolbar, this);
     if (destroyGhost) this.ghost?.destroy();
     this.ghost = undefined;

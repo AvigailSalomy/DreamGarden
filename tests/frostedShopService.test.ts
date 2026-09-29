@@ -229,4 +229,27 @@ describe("FrostedShopService — the Winter Market", () => {
     const after = JSON.stringify({ objects: save.state.objects, requests: save.state.requests, frostedValley: save.state.frostedValley });
     expect(after).toBe(before);
   });
+
+  it("affordability boundary: exactly the price, above it → purchasable; one coin below → not, and nothing is charged", () => {
+    const price = FROSTED_SHOP_CATALOG.find((i) => i.id === "cabin_small")!.price; // 260
+    for (const [coins, ok] of [[price, true], [price + 1, true], [price - 1, false], [100, false]] as const) {
+      const { shop, economy } = makeStack(coins);
+      expect(shop.canAfford("cabin_small")).toBe(ok);
+      const placed = shop.confirmPurchasePlacement("cabin_small", 900, 1800, 0);
+      expect(!!placed).toBe(ok);
+      expect(economy.coins).toBe(ok ? coins - price : coins);
+      expect(shop.listPlacements().length).toBe(ok ? 1 : 0);
+    }
+  });
+
+  it("owning one copy never makes the next one affordable: 100 coins cannot buy a second 260-coin hut", () => {
+    const { shop, economy, save } = makeStack(300);
+    expect(shop.confirmPurchasePlacement("cabin_small", 900, 1800, 0)).not.toBeNull();
+    save.state.coins = 100;
+    expect(shop.ownedCount("cabin_small")).toBe(1);
+    expect(shop.canAfford("cabin_small")).toBe(false);
+    expect(shop.confirmPurchasePlacement("cabin_small", 1500, 1800, 0)).toBeNull();
+    expect(economy.coins).toBe(100);
+    expect(shop.listPlacements().length).toBe(1);
+  });
 });

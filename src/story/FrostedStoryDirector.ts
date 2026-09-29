@@ -3,6 +3,7 @@ import { frostedProgression } from "../game/services";
 import {
   NOT_YET_HINT,
   PUZZLE_TUTORIAL,
+  SHOP_INTRO,
   mazeHitTutorial,
   nextActionableResource,
   requirementStory,
@@ -29,6 +30,8 @@ export interface StoryHost {
   openPuzzle(animalId: string): void;
   /** The existing small floating hint bubble. */
   showHint(x: number, y: number, message: string): void;
+  /** Pan to the Winter Market, open it, and resolve once the player has closed it again. */
+  guideToShop(): Promise<void>;
 }
 
 /**
@@ -259,6 +262,21 @@ export class FrostedStoryDirector {
     const story = storyFor(animalId);
     if (!story || !shouldShowNote(story.final, (id) => frostedProgression.isStoryNoteSeen(id))) return;
     await this.lockedNote(story.final, { target: this.screenRect(this.host.animalSprite(animalId), 0.05), envelope: true });
+  }
+
+  /* ------------------------------------------------------------ shop introduction */
+
+  /**
+   * Once the Rabbit is a real, active animal (and only then): an envelope says
+   * the Winter Market is open, and "Take me there" walks the player into it.
+   * One-time (persisted like every story note); it changes no progression —
+   * the Fox stays exactly as locked as it was.
+   */
+  async shopIntro(): Promise<void> {
+    if (!frostedProgression.isRescued("fv_rabbit")) return;
+    if (!shouldShowNote(SHOP_INTRO, (id) => frostedProgression.isStoryNoteSeen(id))) return;
+    const result = await this.lockedNote(SHOP_INTRO, { target: this.screenRect(this.host.animalSprite("fv_rabbit"), 0.05), envelope: true });
+    if (result === "confirm") await this.host.guideToShop();
   }
 
   /* ------------------------------------------------------------ highlight */
