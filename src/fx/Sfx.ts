@@ -97,6 +97,45 @@ class SfxEngine {
   tap(): void {
     this.blip(440, 0.05, { type: "sine", vol: 0.1 });
   }
+  /** A quick descending "ouch" — enemy contact / losing a life. */
+  hit(): void {
+    this.blip(320, 0.14, { type: "sawtooth", vol: 0.16, slideTo: 140 });
+  }
+
+  /* ---- Garden Maze arcade cues ---- */
+
+  /** Losing a life: a soft sad slide down, not harsh. */
+  lifeLost(): void {
+    [523, 440, 349, 262].forEach((f, i) => this.blip(f, 0.2, { type: "triangle", vol: 0.16, slideTo: f * 0.94, delay: i * 0.14 }));
+  }
+  /** Respawn shimmer. */
+  respawn(): void {
+    [784, 988, 1319].forEach((f, i) => this.blip(f, 0.16, { type: "sine", vol: 0.1, delay: i * 0.06 }));
+  }
+  /** Mission item collected — brighter than a coin. */
+  itemCollect(): void {
+    this.blip(660, 0.1, { type: "triangle", vol: 0.18, slideTo: 990 });
+    this.blip(1320, 0.14, { type: "sine", vol: 0.1, delay: 0.08 });
+  }
+  /** Heart: a warm two-beat "ba-dum" up. */
+  heartUp(): void {
+    this.blip(392, 0.12, { type: "triangle", vol: 0.2, slideTo: 523 });
+    this.blip(523, 0.18, { type: "triangle", vol: 0.2, slideTo: 784, delay: 0.14 });
+  }
+  /** Power Crystal: a rising icy sweep. */
+  powerUp(): void {
+    this.blip(330, 0.45, { type: "sine", vol: 0.14, slideTo: 1320 });
+    [1047, 1319, 1568].forEach((f, i) => this.blip(f, 0.12, { type: "sine", vol: 0.08, delay: 0.2 + i * 0.07 }));
+  }
+  /** Catching a frightened enemy. */
+  enemyCatch(): void {
+    this.blip(880, 0.08, { type: "square", vol: 0.08, slideTo: 1760 });
+    this.blip(1760, 0.14, { type: "sine", vol: 0.1, delay: 0.07 });
+  }
+  /** Countdown tick; `go` for the final higher note. */
+  countdown(go = false): void {
+    this.blip(go ? 988 : 587, go ? 0.26 : 0.12, { type: "triangle", vol: 0.16 });
+  }
 
   /** Bunny Heist: a fox has just noticed something ("!"). */
   alertPing(): void {

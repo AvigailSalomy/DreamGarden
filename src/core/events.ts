@@ -35,4 +35,13 @@ export interface GameEvents {
   "decor:placed": { placementId: string; itemId: string; x: number; y: number };
   "decor:placeCancelled": { itemId: string };
   "accessory:changed": { animalId: string };
+
+  /** Frosted Valley (World 2) — entirely separate from the Garden events above. */
+  "frosted:resourceProgress": { animalId: string; resourceId: string; current: number; required: number };
+  "frosted:resourceRestored": { animalId: string; resourceId: string };
+  "frosted:animalRescued": { animalId: string };
+
+  /** Frosted Valley's Winter Market (Shop) — purchase/placement of decorative world objects. */
+  "frosted:shopPurchased": { itemId: string; placementId: string };
+  "frosted:shopRemoved": { itemId: string; placementId: string };
 }

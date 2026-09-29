@@ -113,6 +113,21 @@ describe("SaveService", () => {
     expect(s.state.coins).toBe(STARTING_COINS);
   });
 
+  it("Dream Garden reset keeps Frosted Valley progression and shop intact", () => {
+    const s = new SaveService(KEY);
+    s.state.objects.rabbit = { puzzles_completed: 1, is_unlocked: true };
+    s.state.frostedValley.currentAnimalIndex = 2;
+    s.state.frostedValley.storyNotesSeen = { n1: true } as never;
+    const fv = JSON.parse(JSON.stringify(s.state.frostedValley));
+    const shop = JSON.parse(JSON.stringify(s.state.frostedShop));
+    s.saveNow();
+    s.reset();
+    expect(s.state.objects).toEqual({});
+    expect(s.state.frostedValley).toEqual(fv);
+    expect(s.state.frostedShop).toEqual(shop);
+    expect(new SaveService(KEY).state.frostedValley).toEqual(fv);
+  });
+
   it("reset wipes every DreamGarden field, including requests/minigame", () => {
     const s = new SaveService(KEY);
     s.state.coins = 99;

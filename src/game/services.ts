@@ -5,7 +5,11 @@ import { EconomyService } from "../core/EconomyService";
 import { ProgressionService } from "../core/ProgressionService";
 import { RequestsService } from "../core/RequestsService";
 import { ShopService } from "../core/ShopService";
+import { FrostedValleyProgressionService } from "../core/FrostedValleyProgressionService";
+import { FrostedShopService } from "../core/FrostedShopService";
 import { CATALOG } from "../data/objects";
+import { FROSTED_CATALOG } from "../data/frostedValley";
+import { FROSTED_SHOP_CATALOG } from "../data/frostedShop";
 import { SAVE_KEY } from "./config";
 
 /** `?reset` on the URL wipes the save before anything reads it (handy for demos). */
@@ -23,6 +27,8 @@ export const economy = new EconomyService(save, bus);
 export const progression = new ProgressionService(save, economy, bus, CATALOG);
 export const requests = new RequestsService(save, economy, bus, CATALOG);
 export const shop = new ShopService(save, economy, progression, bus);
+export const frostedProgression = new FrostedValleyProgressionService(save, economy, bus, FROSTED_CATALOG);
+export const frostedShop = new FrostedShopService(save, economy, bus, FROSTED_SHOP_CATALOG);
 
 /** True when the player has anything worth continuing (unlocked objects, coins, or a puzzle in progress). */
 export function hasProgress(): boolean {
@@ -47,4 +53,9 @@ if (typeof window !== "undefined") {
     if (document.visibilityState === "hidden") flush();
   });
   window.addEventListener("pagehide", flush);
+}
+
+/** DEV ONLY: the live service instances, for driving/verifying flows from the browser console. */
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__dgServices = { save, economy, frostedProgression, frostedShop };
 }

@@ -1,5 +1,5 @@
 import { SAVE_KEY, SAVE_VERSION, STARTING_COINS } from "../game/config";
-import type { SaveState, ShopSaveState } from "../data/types";
+import type { FrostedShopSaveState, FrostedValleySaveState, SaveState, ShopSaveState } from "../data/types";
 import { CATALOG } from "../data/objects";
 
 function freshShopState(): ShopSaveState {
@@ -16,6 +16,15 @@ function freshShopState(): ShopSaveState {
   };
 }
 
+
+function freshFrostedValley(): FrostedValleySaveState {
+  return { currentAnimalIndex: 0, animals: {}, mazeTutorialSeen: false, mazeDeck: [], storyNotesSeen: {} };
+}
+
+function freshFrostedShop(): FrostedShopSaveState {
+  return { placements: [], petOwned: {}, equipped: {} };
+}
+
 export function freshSave(): SaveState {
   const now = Date.now();
   return {
@@ -30,6 +39,8 @@ export function freshSave(): SaveState {
     minigame: {},
     resources: {},
     restoredSources: {},
+    frostedValley: freshFrostedValley(),
+    frostedShop: freshFrostedShop(),
     stats: { puzzlesSolved: 0, startedAt: now, lastPlayed: now },
     shop: freshShopState(),
   };
@@ -80,6 +91,32 @@ export function migrate(data: unknown): SaveState {
     resources: d.resources && typeof d.resources === "object" ? d.resources : {},
     restoredSources:
       d.restoredSources && typeof d.restoredSources === "object" ? d.restoredSources : {},
+    frostedValley:
+      d.frostedValley && typeof d.frostedValley === "object"
+        ? {
+            currentAnimalIndex:
+              typeof d.frostedValley.currentAnimalIndex === "number" ? d.frostedValley.currentAnimalIndex : 0,
+            animals:
+              d.frostedValley.animals && typeof d.frostedValley.animals === "object" ? d.frostedValley.animals : {},
+            mazeTutorialSeen: !!d.frostedValley.mazeTutorialSeen,
+            mazeDeck: Array.isArray(d.frostedValley.mazeDeck)
+              ? d.frostedValley.mazeDeck.filter((id): id is string => typeof id === "string")
+              : [],
+            lastMazeId: typeof d.frostedValley.lastMazeId === "string" ? d.frostedValley.lastMazeId : undefined,
+            storyNotesSeen:
+              d.frostedValley.storyNotesSeen && typeof d.frostedValley.storyNotesSeen === "object"
+                ? d.frostedValley.storyNotesSeen
+                : {},
+          }
+        : freshFrostedValley(),
+    frostedShop:
+      d.frostedShop && Array.isArray(d.frostedShop.placements)
+        ? {
+            placements: d.frostedShop.placements,
+            petOwned: d.frostedShop.petOwned && typeof d.frostedShop.petOwned === "object" ? d.frostedShop.petOwned : {},
+            equipped: d.frostedShop.equipped && typeof d.frostedShop.equipped === "object" ? d.frostedShop.equipped : {},
+          }
+        : freshFrostedShop(),
     stats: { ...base.stats, ...(d.stats ?? {}) },
     shop: sanitizeShop({
       ...base.shop,
@@ -148,8 +185,12 @@ export class SaveService {
     return this.storageOk;
   }
 
+  /** "Start New Garden": wipes every Dream Garden field (and resets the shared
+   *  coin wallet), but NEVER Frosted Valley — the other world's progression and
+   *  Winter Market placements are carried over untouched. */
   reset(): void {
-    this.state = freshSave();
+    const { frostedValley, frostedShop } = this.state;
+    this.state = { ...freshSave(), frostedValley, frostedShop };
     this.saveNow();
   }
 }

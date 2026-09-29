@@ -61,3 +61,19 @@ tmp/
 # scripts/process_dg_assets.py turns it into the actual shipped, trimmed,
 # background-removed sprites under public/assets/dg/, which ARE committed.
 /Game_Assets_Dream_Garden/
+
+# Raw asset-generation source (Frosted Valley) — the processed production PNGs
+# actually used by the game live in public/assets/frosted/; these are the
+# original ungrouped Gemini exports, not meant to ship.
+Game_Assets_frozen_world_Compressed/
+src/Game_Assets_frozen_world_Compressed/
+/Gemini_Generated_Image_*.jpeg
+/*.lnk
+tests/animals request/
+
+# Local Claude Code state (per developer)
+.claude/
+
+# Python bytecode caches
+__pycache__/
+*.pyc

@@ -8,6 +8,7 @@ export function sparkleBurst(
   y: number,
   count = 10,
   spread = 60,
+  tint = 0xffffff,
 ): void {
   const p = scene.add.particles(x, y, "spark", {
     lifespan: { min: 400, max: 900 },
@@ -17,6 +18,7 @@ export function sparkleBurst(
     alpha: { start: 1, end: 0 },
     rotate: { min: 0, max: 360 },
     gravityY: -20,
+    tint,
     blendMode: Phaser.BlendModes.ADD,
     emitting: false,
   });
@@ -41,8 +43,8 @@ export function petalPuff(scene: Phaser.Scene, x: number, y: number, count = 12)
   scene.time.delayedCall(1800, () => p.destroy());
 }
 
-export function dustRing(scene: Phaser.Scene, x: number, y: number): void {
-  const d = scene.add.image(x, y, "dust").setDepth(50).setScale(0.3).setAlpha(0.9);
+export function dustRing(scene: Phaser.Scene, x: number, y: number, tint = 0xffffff): void {
+  const d = scene.add.image(x, y, "dust").setDepth(50).setScale(0.3).setAlpha(0.9).setTint(tint);
   scene.tweens.add({
     targets: d,
     scale: 1.5,
@@ -58,12 +60,14 @@ export function gatherGlow(
   x: number,
   y: number,
   duration = 700,
+  tint = 0xffffff,
 ): Promise<Phaser.GameObjects.Image> {
   const g = scene.add
     .image(x, y, "glow")
     .setDepth(40)
     .setScale(0.2)
     .setAlpha(0)
+    .setTint(tint)
     .setBlendMode(Phaser.BlendModes.ADD);
   const ring = scene.add.particles(x, y, "spark", {
     lifespan: 700,
@@ -71,6 +75,7 @@ export function gatherGlow(
     radial: true,
     scale: { start: 0, end: 0.6 },
     alpha: { start: 0, end: 0.9 },
+    tint,
     blendMode: Phaser.BlendModes.ADD,
     frequency: 40,
     emitZone: {

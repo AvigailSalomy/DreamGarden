@@ -15,6 +15,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.input.enabled = true; // (re)entering the menu always takes input again
     const backdrop = buildCozyBackdrop(this);
     for (const obj of backdrop) {
       const key = (obj as Phaser.GameObjects.Image).texture?.key;
@@ -96,6 +97,29 @@ export class MenuScene extends Phaser.Scene {
         audio.unlock();
         audio.playSfx("ui_click");
         settingsModal(this, { onStartNew: () => this.confirmNew() });
+      },
+      { hitW: 56, hitH: 56 },
+    );
+
+    // Frosted Valley — an isolated new-world build; launched as an overlay on
+    // top of Menu, its own "‹" back button just stops it.
+    makeIconButton(
+      this,
+      inset.left + 30,
+      inset.top + 32,
+      "❄️",
+      28,
+      () => {
+        audio.unlock();
+        audio.playSfx("ui_click");
+        // Frosted Valley is an overlay on top of this menu. While it's open the
+        // menu must not take input — otherwise a tap on empty snow falls
+        // through to the Continue/New Garden buttons underneath.
+        this.input.enabled = false;
+        this.scene.launch("FrostedValley");
+        this.scene.get("FrostedValley").events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+          if (this.sys.isActive()) this.input.enabled = true;
+        });
       },
       { hitW: 56, hitH: 56 },
     );
