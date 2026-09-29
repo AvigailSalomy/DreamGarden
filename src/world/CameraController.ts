@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+import Phaser from 'phaser';
 import {
   ZOOM_MAX,
   ZOOM_MIN,
@@ -8,8 +8,8 @@ import {
   decayVelocity,
   isDragGesture,
   zoomAroundPoint,
-} from "./cameraMath";
-import type { WorldSize } from "./cameraMath";
+} from './cameraMath';
+import type { WorldSize } from './cameraMath';
 
 /**
  * Encapsulated garden camera control:
@@ -50,7 +50,13 @@ export class CameraController {
     private world: WorldSize,
   ) {
     this.cam = scene.cameras.main;
-    this.cam.setBounds(0, 0, world.w, world.h);
+    const padding = 400;
+    this.cam.setBounds(
+      -padding,
+      -padding,
+      world.w + padding * 2,
+      world.h + padding * 2,
+    );
     this.recomputeMinZoom();
     this.targetZoom = this.cam.zoom;
 
@@ -58,7 +64,7 @@ export class CameraController {
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.handleMove, this);
     scene.input.on(Phaser.Input.Events.POINTER_UP, this.handleUp, this);
     scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.handleUp, this);
-    scene.input.on("wheel", this.handleWheel, this);
+    scene.input.on('wheel', this.handleWheel, this);
     scene.events.on(Phaser.Scenes.Events.UPDATE, this.update, this);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     scene.events.once(Phaser.Scenes.Events.DESTROY, this.destroy, this);
@@ -105,9 +111,16 @@ export class CameraController {
 
     tasks.push(
       new Promise((resolve) => {
-        this.cam.pan(x, y, duration, Phaser.Math.Easing.Sine.InOut, false, (_c, p) => {
-          if (p >= 1) resolve();
-        });
+        this.cam.pan(
+          x,
+          y,
+          duration,
+          Phaser.Math.Easing.Sine.InOut,
+          false,
+          (_c, p) => {
+            if (p >= 1) resolve();
+          },
+        );
       }),
     );
 
@@ -120,7 +133,7 @@ export class CameraController {
               targets: this.cam,
               zoom: z,
               duration,
-              ease: "Sine.easeInOut",
+              ease: 'Sine.easeInOut',
               onComplete: () => resolve(),
             });
           }),
@@ -152,7 +165,7 @@ export class CameraController {
   /* ---------------- pointer plumbing ---------------- */
 
   private uiHasPointer(): boolean {
-    return this.scene.registry.get("pointerOnUI") === true;
+    return this.scene.registry.get('pointerOnUI') === true;
   }
 
   private handleDown(p: Phaser.Input.Pointer): void {
@@ -235,7 +248,9 @@ export class CameraController {
 
   /* ---------------- pinch ---------------- */
 
-  private pointerPair(): [{ x: number; y: number }, { x: number; y: number }] | null {
+  private pointerPair():
+    | [{ x: number; y: number }, { x: number; y: number }]
+    | null {
     const pts = [...this.pointers.values()];
     if (pts.length < 2) return null;
     return [pts[0], pts[1]];
@@ -292,12 +307,18 @@ export class CameraController {
   ): void {
     if (!this.enabled || this.uiHasPointer()) return;
     const factor = Math.exp(-dy * 0.0018);
-    this.applyZoom(this.cz(this.targetZoom * factor), p.x, p.y, false);
+    const nextZoom = clampZoom(this.targetZoom * factor, 0.22, 1.25);
+    this.applyZoom(nextZoom, p.x, p.y, false);
   }
 
   /* ---------------- zoom apply + loop ---------------- */
 
-  private applyZoom(z: number, focalX: number, focalY: number, immediate: boolean): void {
+  private applyZoom(
+    z: number,
+    focalX: number,
+    focalY: number,
+    immediate: boolean,
+  ): void {
     this.targetZoom = z;
     this.zoomFocal.x = focalX;
     this.zoomFocal.y = focalY;
@@ -328,11 +349,16 @@ export class CameraController {
     if (this.enabled && Math.abs(this.cam.zoom - this.targetZoom) > 0.0008) {
       const k = 1 - Math.pow(0.0012, delta / 1000);
       const z = this.cz(Phaser.Math.Linear(this.cam.zoom, this.targetZoom, k));
-      this.setZoom(z, this.zoomFocal.x || this.cam.width / 2, this.zoomFocal.y || this.cam.height / 2);
+      this.setZoom(
+        z,
+        this.zoomFocal.x || this.cam.width / 2,
+        this.zoomFocal.y || this.cam.height / 2,
+      );
     }
 
     // gentle inertial pan
-    if (this.dragging || this.pinch || (this.vel.x === 0 && this.vel.y === 0)) return;
+    if (this.dragging || this.pinch || (this.vel.x === 0 && this.vel.y === 0))
+      return;
     this.cam.scrollX -= this.vel.x / this.cam.zoom;
     this.cam.scrollY -= this.vel.y / this.cam.zoom;
     this.vel.x = decayVelocity(this.vel.x, delta);
@@ -341,22 +367,41 @@ export class CameraController {
   };
 
   private clamp(): void {
+    // clampScroll works in a [0, world] space. The real scroll range is
+    // [-padding, world+padding], so shift IN by +padding before clamping,
+    // then shift back OUT by -padding after — both halves are required.
+    // (The previous version only shifted out, never in, which drove scroll
+    // toward a broken fixed point near -padding on both axes within a few
+    // frames — the camera would appear to work briefly then freeze.)
+    const padding = 400;
     const c = clampScroll(
-      this.cam.scrollX,
-      this.cam.scrollY,
+      this.cam.scrollX + padding,
+      this.cam.scrollY + padding,
       { width: this.cam.width, height: this.cam.height, zoom: this.cam.zoom },
-      this.world,
+      { w: this.world.w + padding * 2, h: this.world.h + padding * 2 },
     );
-    this.cam.scrollX = c.x;
-    this.cam.scrollY = c.y;
+    this.cam.scrollX = c.x - padding;
+    this.cam.scrollY = c.y - padding;
   }
 
   private destroy(): void {
-    this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.handleDown, this);
-    this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.handleMove, this);
+    this.scene.input.off(
+      Phaser.Input.Events.POINTER_DOWN,
+      this.handleDown,
+      this,
+    );
+    this.scene.input.off(
+      Phaser.Input.Events.POINTER_MOVE,
+      this.handleMove,
+      this,
+    );
     this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.handleUp, this);
-    this.scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.handleUp, this);
-    this.scene.input.off("wheel", this.handleWheel, this);
+    this.scene.input.off(
+      Phaser.Input.Events.POINTER_UP_OUTSIDE,
+      this.handleUp,
+      this,
+    );
+    this.scene.input.off('wheel', this.handleWheel, this);
     this.scene.events.off(Phaser.Scenes.Events.UPDATE, this.update, this);
   }
 }

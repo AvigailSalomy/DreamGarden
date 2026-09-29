@@ -5,4 +5,5 @@ import "@fontsource/baloo-2/700.css";
 
 import { startGame } from "./game/DreamGarden";
 
-startGame();
+const __dgGame = startGame();
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__dgGame = __dgGame;

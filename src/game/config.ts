@@ -6,13 +6,13 @@
 export const DESIGN_WIDTH = 720;
 export const DESIGN_HEIGHT = 1280;
 
-export const WORLD_WIDTH = 3200;
-export const WORLD_HEIGHT = 2400;
+export const WORLD_WIDTH = 4400;
+export const WORLD_HEIGHT = 3200;
 
 /** Ground horizon in world Y (sky/hills above, garden below). */
 export const HORIZON = 460;
 
-export const SAVE_KEY = "dreamgarden.save.v1";
+export const SAVE_KEY = 'dreamgarden.save.v1';
 export const SAVE_VERSION = 3;
 
 /** Fresh-game starting coin balance — enough to buy the first Rabbit request immediately. */
@@ -22,5 +22,5 @@ export const STARTING_COINS = 60;
 export const START_FOCUS = { x: 900, y: 1500 };
 
 export const IS_TOUCH =
-  typeof window !== "undefined" &&
-  ("ontouchstart" in window || (navigator?.maxTouchPoints ?? 0) > 0);
+  typeof window !== 'undefined' &&
+  ('ontouchstart' in window || (navigator?.maxTouchPoints ?? 0) > 0);

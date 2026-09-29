@@ -145,6 +145,10 @@ export interface SaveState {
   requests: Record<string, string[]>;
   /** Per-object: Catch & Collect progress. */
   minigame: Record<string, MiniGameProgress>;
+  /** Frosted Valley (World 2) progression — fully separate from every Garden field above. */
+  frostedValley: FrostedValleySaveState;
+  /** Frosted Valley's Winter Market (Shop) — fully separate from every field above. */
+  frostedShop: FrostedShopSaveState;
   stats: {
     puzzlesSolved: number;
     startedAt: number;
@@ -155,6 +159,153 @@ export interface SaveState {
 export interface MiniGameProgress {
   level: number;
   roundsCompleted: number;
+}
+
+/* ---------- Frosted Valley (World 2) — isolated progression slice ---------- */
+
+/** One damaged→restored restoration target belonging to a Frosted Valley animal's habitat. */
+export interface FrostedResourceDef {
+  id: string;
+  label: string;
+  /** Texture key of the neglected/damaged sprite already standing in the world. */
+  damagedAsset: string;
+  /** Texture key it crossfades to once restored. */
+  restoredAsset: string;
+  /** How many mission items the Garden Maze run for this resource asks for. */
+  requiredAmount: number;
+  /** What the player actually collects in the maze for this resource — a clearly recognisable object. */
+  mazeItem: FrostedMazeItemDef;
+}
+
+/** The mission collectible of one resource's Garden Maze run (e.g. Carrots for the Carrot Patch). */
+export interface FrostedMazeItemDef {
+  /** Texture key; `mz_*` keys are SVGs GardenMazeScene loads at high resolution, `fv_*` are Frosted Valley art. */
+  texture: string;
+  /** Plural, as shown in "COLLECT 5 CARROTS". */
+  label: string;
+  /** Singular, for "+1 Carrot" style feedback. */
+  singular: string;
+}
+
+/** One of the six Frosted Valley animals and its habitat. */
+export interface FrostedAnimalDef {
+  id: string;
+  name: string;
+  habitatName: string;
+  /** Position in the fixed rescue order (0 = first). */
+  order: number;
+  /** Exactly one resource per restoration target — normally 3; see data file for any short of that. */
+  resources: FrostedResourceDef[];
+  coinReward: number;
+  letterBody: string;
+  /** The animal's final reward puzzle, unlocked only once every resource is restored. */
+  puzzle: FrostedPuzzleDef;
+}
+
+/**
+ * One animal's irregular jigsaw. Difficulty rises along the rescue order through
+ * more pieces AND through the knobs: `irregularity` (0..1) drives how far knob
+ * size/placement/skew and the lattice corners wander from a clean grid.
+ */
+export interface FrostedPuzzleDef {
+  /** Texture key; the file is public/assets/frosted/puzzle/<image>.jpg (existing final art, never regenerated). */
+  image: string;
+  cols: number;
+  rows: number;
+  irregularity: number;
+  /** Strength of the faint cut-line guide etched on the empty board (lower = harder). The board never shows the picture itself. */
+  guideAlpha: number;
+  /** Snap tolerance as a fraction of the smaller cell side. */
+  snapFactor: number;
+}
+
+/** Per-resource runtime progress, persisted. */
+export interface FrostedResourceProgress {
+  current: number;
+  restored: boolean;
+}
+
+/** Per-animal runtime progress, persisted. */
+export interface FrostedAnimalProgress {
+  resources: Record<string, FrostedResourceProgress>;
+  rescued: boolean;
+  rewardClaimed: boolean;
+  /** This animal's own introductory letter — shown once, the moment it becomes the active chapter. */
+  letterSeen: boolean;
+  /**
+   * The reward puzzle is solved but the 10s unlock cinematic hasn't finished
+   * yet — `rescued` is only committed at the END of that cinematic, so a reload
+   * in between replays the cinematic once instead of skipping or losing it.
+   */
+  puzzleSolved?: boolean;
+}
+
+export interface FrostedValleySaveState {
+  /** Index into the fixed FROSTED_CATALOG order — the only animal currently active/interactive. */
+  currentAnimalIndex: number;
+  animals: Record<string, FrostedAnimalProgress>;
+  /** Garden Maze: has the one-time "How to play" card been dismissed? */
+  mazeTutorialSeen: boolean;
+  /** Garden Maze: maze ids still unplayed in the current shuffle deck (refilled + reshuffled once empty). */
+  mazeDeck: string[];
+  /** Garden Maze: the last maze played, so a reshuffle never hands it straight back. */
+  lastMazeId?: string;
+  /**
+   * Story / envelope notes (see data/frostedStory.ts) and one-time tutorials
+   * already shown — e.g. "rabbit_intro_seen", "pacman_hit_tutorial_seen".
+   * Optional so older saves (and test fixtures) without it still type-check.
+   */
+  storyNotesSeen?: Record<string, true>;
+}
+
+/* ---------- Frosted Valley Winter Market (Shop) — isolated slice ---------- */
+
+export type FrostedShopCategory = "building" | "pet" | "plant" | "decoration";
+
+/** Where a "pet" category item attaches on an animal's portrait, as a fraction of its displayed width/height. */
+export type FrostedShopAnchor = "head" | "face" | "neck";
+
+/** One purchasable Shop item — reuses a real, already-painted piece of Frosted Valley art. */
+export interface FrostedShopItemDef {
+  id: string;
+  label: string;
+  /** Texture key, loaded from public/assets/frosted/shop/. */
+  textureKey: string;
+  category: FrostedShopCategory;
+  price: number;
+  /** World-unit display height when placed (native aspect is preserved), matching propH's convention. Ignored for "pet" items — see previewScale. */
+  targetHeight: number;
+  /**
+   * What fraction of the RAW source PNG's height is actually the visible
+   * artwork (the rest is transparent padding around it) — measured from the
+   * real file, not guessed. Placement code divides by this so `targetHeight`
+   * means the item's true on-screen height, the same fix applied to pet
+   * accessories: without it, a padded PNG renders smaller than intended and
+   * looks "tiny" next to the world's own un-padded building art. Defaults to
+   * 1 (no correction) for any item this hasn't been measured for yet.
+   */
+  visibleHeightFraction?: number;
+  /** "pet" items only: which anchor on the animal portrait this attaches to. */
+  anchor?: FrostedShopAnchor;
+  /** "pet" items only: size relative to the animal's own displayed height. */
+  previewScale?: number;
+}
+
+/** One decoration the player has purchased and placed in the world. */
+export interface FrostedShopPlacement {
+  id: string;
+  itemId: string;
+  x: number;
+  y: number;
+  rotation: number;
+}
+
+export interface FrostedShopSaveState {
+  placements: FrostedShopPlacement[];
+  /** "pet" category items the player owns — separate from placements, since accessories are worn, not placed in the world. */
+  petOwned: Record<string, true>;
+  /** Per-animal: the itemId currently worn, or null. Only ever set for owned "pet" items. */
+  equipped: Record<string, string | null>;
 }
 
 /* ---------- runtime view-model ---------- */
