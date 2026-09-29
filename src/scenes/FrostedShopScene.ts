@@ -5,6 +5,8 @@ import { titleStyle, bodyStyle, COLORS } from "../ui/theme";
 import { FROSTED_SHOP_CATALOG, FROSTED_SHOP_CATEGORIES } from "../data/frostedShop";
 import type { FrostedAnimalDef, FrostedShopAnchor, FrostedShopCategory, FrostedShopItemDef } from "../data/types";
 import { frostedShop, frostedProgression, economy } from "../game/services";
+import { SHOP_TUTORIAL, shouldShowNote } from "../data/frostedStory";
+import { showNote } from "../story/StoryNotes";
 import type { FrostedValleyScene } from "./FrostedValleyScene";
 import { Sfx } from "../fx/Sfx";
 import { sparkleBurst } from "../fx/Particles";
@@ -27,12 +29,12 @@ const PREVIEW_W = 260;
  * table doesn't (yet) cover.
  */
 const ANCHOR_FRACTION: Record<string, Record<FrostedShopAnchor, { x: number; y: number }>> = {
-  fv_rabbit: { head: { x: 0.5, y: 0.26 }, face: { x: 0.57, y: 0.46 }, neck: { x: 0.5, y: 0.62 } },
-  fv_fox: { head: { x: 0.65, y: 0.18 }, face: { x: 0.68, y: 0.36 }, neck: { x: 0.62, y: 0.58 } },
-  fv_deer: { head: { x: 0.62, y: 0.16 }, face: { x: 0.62, y: 0.38 }, neck: { x: 0.55, y: 0.58 } },
-  fv_squirrel: { head: { x: 0.72, y: 0.22 }, face: { x: 0.74, y: 0.38 }, neck: { x: 0.68, y: 0.56 } },
-  fv_polarbear: { head: { x: 0.55, y: 0.12 }, face: { x: 0.53, y: 0.32 }, neck: { x: 0.5, y: 0.58 } },
-  fv_penguin: { head: { x: 0.42, y: 0.12 }, face: { x: 0.38, y: 0.28 }, neck: { x: 0.4, y: 0.45 } },
+  fv_rabbit: { head: { x: 0.5, y: 0.26 }, face: { x: 0.57, y: 0.46 }, neck: { x: 0.5, y: 0.62 }, collar: { x: 0.5, y: 0.62 } },
+  fv_fox: { head: { x: 0.65, y: 0.18 }, face: { x: 0.68, y: 0.36 }, neck: { x: 0.62, y: 0.58 }, collar: { x: 0.62, y: 0.58 } },
+  fv_deer: { head: { x: 0.62, y: 0.16 }, face: { x: 0.62, y: 0.38 }, neck: { x: 0.55, y: 0.58 }, collar: { x: 0.55, y: 0.58 } },
+  fv_squirrel: { head: { x: 0.72, y: 0.22 }, face: { x: 0.74, y: 0.38 }, neck: { x: 0.68, y: 0.56 }, collar: { x: 0.56, y: 0.66 } },
+  fv_polarbear: { head: { x: 0.55, y: 0.12 }, face: { x: 0.53, y: 0.32 }, neck: { x: 0.5, y: 0.58 }, collar: { x: 0.5, y: 0.58 } },
+  fv_penguin: { head: { x: 0.42, y: 0.12 }, face: { x: 0.38, y: 0.28 }, neck: { x: 0.4, y: 0.45 }, collar: { x: 0.55, y: 0.6 } },
 };
 
 /**
@@ -83,6 +85,7 @@ const WEARABLE_TILT: Record<string, number> = {
 function accessoryOriginY(anchor: FrostedShopAnchor, art: { top: number; bottom: number }): number {
   if (anchor === "head") return art.bottom;
   if (anchor === "neck") return art.top;
+  // "face" (goggles) and "collar" (bow / snowflake at the neck) are centred on their anchor
   return (art.top + art.bottom) / 2;
 }
 
@@ -115,6 +118,8 @@ export class FrostedShopScene extends Phaser.Scene {
   private previewAccessory?: Phaser.GameObjects.Image;
   private previewAccessoryShadow?: Phaser.GameObjects.Ellipse;
   private previewAccessoryH = 0;
+  private selectedAccessoryAnchor: FrostedShopAnchor | null = null;
+  private previewShadowDy = 0;
   private selectedPetItem: string | null = null;
   private previewNameText?: Phaser.GameObjects.Text;
   private previewPriceText?: Phaser.GameObjects.Text;
@@ -133,7 +138,9 @@ export class FrostedShopScene extends Phaser.Scene {
     this.activeTab = "pet";
     this.cardHighlights.clear();
     this.tabButtons = [];
-    this.previewAnimalId = frostedProgression.currentAnimal?.id ?? "fv_rabbit";
+    // only genuinely unlocked animals can be previewed; default to the newest one
+    const unlockedNow = frostedProgression.unlockedAnimals();
+    this.previewAnimalId = unlockedNow[unlockedNow.length - 1]?.id ?? "";
 
     const w = this.scale.width;
     const h = this.scale.height;
@@ -222,6 +229,13 @@ export class FrostedShopScene extends Phaser.Scene {
     this.rebuildGrid(gridX, gridTop, gridW);
     this.paintNav();
     this.refreshPreviewForTab();
+
+    // the first time the Market opens: a short "how it works" note (one-time, persisted like every other story note)
+    if (shouldShowNote(SHOP_TUTORIAL, (id) => frostedProgression.isStoryNoteSeen(id))) {
+      this.time.delayedCall(600, () => {
+        void showNote(this.game, { note: SHOP_TUTORIAL, blocking: true, anchor: "center" });
+      });
+    }
   }
 
   /* ---------------- nav ---------------- */
@@ -305,7 +319,10 @@ export class FrostedShopScene extends Phaser.Scene {
 
     const isPet = item.category === "pet";
     const owned = isPet ? frostedShop.isPetOwned(item.id) : frostedShop.ownedCount(item.id) > 0;
-    const affordable = owned || economy.canAfford(item.price);
+    // A world item can be bought again and again, so owning one copy says nothing
+    // about being able to pay for the next: only pet accessories (bought once,
+    // re-equipped free) are available regardless of the wallet once owned.
+    const affordable = isPet ? owned || economy.canAfford(item.price) : economy.canAfford(item.price);
 
     const bg = makePanel(this, Math.min(colW, CARD_W), CARD_H, { radius: 16, fill: 0xfffaf0, edge: COLORS.panelEdge, shadow: false });
     card.add(bg);
@@ -341,6 +358,7 @@ export class FrostedShopScene extends Phaser.Scene {
         .text(0, 34, `🪙 ${item.price}`, { ...titleStyle(13), color: affordable ? "#8a5a00" : "#9a9086" })
         .setOrigin(0.5);
       card.add(priceText);
+      if (owned) card.add(this.add.text(0, 8, `In valley: ×${frostedShop.ownedCount(item.id)}`, bodyStyle(10)).setOrigin(0.5, 0));
 
       const btnBg = this.add.graphics();
       const btnY = 62;
@@ -384,6 +402,7 @@ export class FrostedShopScene extends Phaser.Scene {
   /* ---------------- pet try-on ---------------- */
 
   private tryOnPetItem(itemId: string): void {
+    if (!this.previewAnimalId) return; // nobody unlocked yet: nothing to dress
     const prev = this.selectedPetItem;
     if (prev) this.paintCardHighlight(prev, false);
     this.selectedPetItem = itemId;
@@ -394,7 +413,7 @@ export class FrostedShopScene extends Phaser.Scene {
   }
 
   private onBuyPetItem(): void {
-    if (!this.selectedPetItem) return;
+    if (!this.selectedPetItem || !this.previewAnimalId) return;
     const item = frostedShop.def(this.selectedPetItem);
     if (!item) return;
     const owned = frostedShop.isPetOwned(item.id);
@@ -430,6 +449,8 @@ export class FrostedShopScene extends Phaser.Scene {
    * a spot and lets go — no separate confirm/checkmark step.
    */
   private startWorldItemDrag(item: FrostedShopItemDef, pointer: Phaser.Input.Pointer): void {
+    // never enter placement for something the wallet can't cover
+    if (!frostedShop.canAfford(item.id)) return;
     const sx = pointer.x;
     const sy = pointer.y;
     this.registry.set("pointerOnUI", false);
@@ -450,6 +471,16 @@ export class FrostedShopScene extends Phaser.Scene {
     // actual choice to make, so a fresh save with just the rabbit stays
     // exactly as compact as before.
     const unlocked = frostedProgression.unlockedAnimals();
+    if (unlocked.length === 0) {
+      root.add(
+        this.add
+          .text(cx, topY + 120, "Rescue a friend to\ntry accessories on!", { ...bodyStyle(15), align: "center" })
+          .setOrigin(0.5, 0),
+      );
+      this.previewBuyBg = this.add.graphics();
+      this.previewBuyHit = undefined;
+      return;
+    }
     const selectorH = unlocked.length > 1 ? 44 : 0;
     if (selectorH > 0) this.buildAnimalSelector(root, cx, topY + 30, unlocked);
 
@@ -535,6 +566,8 @@ export class FrostedShopScene extends Phaser.Scene {
    */
   private switchPreviewAnimal(animalId: string): void {
     if (animalId === this.previewAnimalId || !this.previewSprite || !this.previewRoot) return;
+    // defence in depth: a locked animal can never be previewed, whatever calls this
+    if (!frostedProgression.isRescued(animalId)) return;
     Sfx.tap();
     this.previewAnimalId = animalId;
     const priorHeight = Math.abs(this.previewSprite.displayHeight);
@@ -634,9 +667,11 @@ export class FrostedShopScene extends Phaser.Scene {
     this.previewAccessory = undefined;
     this.previewAccessoryShadow?.destroy();
     this.previewAccessoryShadow = undefined;
+    this.selectedAccessoryAnchor = null;
     if (!itemId || !this.previewSprite || !this.previewRoot) return;
     const item = frostedShop.def(itemId);
     if (!item || !item.anchor) return;
+    this.selectedAccessoryAnchor = item.anchor;
 
     const spriteH = Math.abs(this.previewSprite.displayHeight);
     const spriteW = this.previewSprite.displayWidth;
@@ -666,8 +701,9 @@ export class FrostedShopScene extends Phaser.Scene {
     // biggest cue that grounds a flat cutout against the body instead of
     // reading as a sticker floating in front of it.
     const shadowW = targetVisibleH * 0.9;
+    this.previewShadowDy = item.anchor === "neck" ? targetVisibleH * 0.08 : item.anchor === "collar" ? targetVisibleH * 0.1 : targetVisibleH * 0.22;
     const shadow = this.add
-      .ellipse(localX, localY + (item.anchor === "neck" ? targetVisibleH * 0.08 : targetVisibleH * 0.22), shadowW, shadowW * 0.32, 0x2b1a12, 0.22)
+      .ellipse(localX, localY + this.previewShadowDy, shadowW, shadowW * 0.32, 0x2b1a12, 0.22)
       .setDepth(4);
     this.previewRoot.add(shadow);
     this.previewRoot.add(img);
@@ -683,6 +719,26 @@ export class FrostedShopScene extends Phaser.Scene {
     this.previewAccessory = img;
     this.previewAccessoryH = targetVisibleH;
     void this.previewAccessoryH;
+  }
+
+  /**
+   * The preview animal breathes (its sprite scaleY pulses), which moves the
+   * head and neck upward relative to the fixed bottom. Re-derive the worn
+   * accessory's anchor from the sprite's CURRENT height every frame so it
+   * stays glued to the same spot of the body instead of drifting (sway and
+   * hop already move both, since they share one container).
+   */
+  update(): void {
+    const acc = this.previewAccessory;
+    const sprite = this.previewSprite;
+    if (!acc || !sprite || !this.selectedAccessoryAnchor) return;
+    const spriteH = Math.abs(sprite.displayHeight);
+    const spriteW = sprite.displayWidth;
+    const frac = (ANCHOR_FRACTION[this.previewAnimalId] ?? ANCHOR_FRACTION.fv_rabbit)[this.selectedAccessoryAnchor];
+    const x = -spriteW / 2 + frac.x * spriteW;
+    const y = -spriteH + frac.y * spriteH;
+    acc.setPosition(x, y);
+    if (this.previewAccessoryShadow) this.previewAccessoryShadow.setPosition(x, y + this.previewShadowDy);
   }
 
   private close(): void {

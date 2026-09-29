@@ -10,6 +10,8 @@ import {
   MAZE_HIT_TUTORIAL_ID,
   PUZZLE_TUTORIAL,
   mazeHitTutorial,
+  SHOP_INTRO,
+  SHOP_TUTORIAL,
   nextActionableResource,
   shouldShowNote,
   storyFor,
@@ -123,6 +125,29 @@ describe("Frosted Valley story notes — progression gating", () => {
     expect(nextActionableResource(fox, (id) => restored.has(id))).toBe("ice");
     restored.add("ice");
     expect(nextActionableResource(fox, (id) => restored.has(id))).toBe("signpost");
+  });
+});
+
+describe("Winter Market introduction notes", () => {
+  it("shop intro is a one-time envelope story with a 'take me there' button; the tutorial is one-time too", () => {
+    expect(SHOP_INTRO.kind).toBe("story");
+    expect(SHOP_INTRO.once).toBe(true);
+    expect(SHOP_INTRO.button).toBeTruthy();
+    expect(SHOP_TUTORIAL.once).toBe(true);
+    expect(SHOP_TUTORIAL.id).not.toBe(SHOP_INTRO.id);
+    // the tutorial covers the four things a first-time shopper needs
+    for (const word of ["coins", "drag", "afford", "TRY IT OUT"]) expect(SHOP_TUTORIAL.body.toLowerCase()).toContain(word.toLowerCase());
+  });
+
+  it("their seen flags are persisted through the existing save and never touch animal progression", () => {
+    const { frosted, save } = makeStack();
+    const before = JSON.stringify(save.state.frostedValley.animals);
+    expect(shouldShowNote(SHOP_INTRO, (id) => frosted.isStoryNoteSeen(id))).toBe(true);
+    frosted.markStoryNoteSeen(SHOP_INTRO.id);
+    frosted.markStoryNoteSeen(SHOP_TUTORIAL.id);
+    expect(shouldShowNote(SHOP_INTRO, (id) => new SaveService(KEY).state.frostedValley.storyNotesSeen?.[id] === true)).toBe(false);
+    expect(JSON.stringify(save.state.frostedValley.animals)).toBe(before);
+    expect(save.state.frostedValley.currentAnimalIndex).toBe(0);
   });
 });
 

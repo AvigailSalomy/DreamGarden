@@ -16,7 +16,7 @@ export const FROSTED_SHOP_CATALOG: FrostedShopItemDef[] = [
   { id: "gazebo", label: "Frosted Gazebo", textureKey: "fv_shop_gazebo", category: "building", price: 380, targetHeight: 480, visibleHeightFraction: 0.9 },
   { id: "cabin_small", label: "Snowbound Hut", textureKey: "fv_shop_cabin_small", category: "building", price: 260, targetHeight: 440, visibleHeightFraction: 0.787 },
 
-  // ---- Pet Accessories ---- (anchor drives WHERE on the animal it attaches
+  // ---- Pet Accessories ---- (anchor drives WHERE on the animal it attaches ("collar" = worn at the neck / upper chest, centred on the neck line)
   // in the Shop's live try-on preview; previewScale is the accessory's own
   // VISIBLE artwork height as a fraction of the animal's displayed height —
   // see ACCESSORY_ART/applyAccessoryToPreview in FrostedShopScene.ts, which
@@ -25,10 +25,10 @@ export const FROSTED_SHOP_CATALOG: FrostedShopItemDef[] = [
   { id: "pet_hat_beanie", label: "Cozy Winter Beanie", textureKey: "fv_shop_pet_hat_beanie", category: "pet", price: 40, targetHeight: 110, anchor: "head", previewScale: 0.26 },
   { id: "pet_scarf_pink", label: "Pink Knit Scarf", textureKey: "fv_shop_pet_scarf_pink", category: "pet", price: 30, targetHeight: 100, anchor: "neck", previewScale: 0.2 },
   { id: "pet_hat_trapper", label: "Frosty Fur Trapper Hat", textureKey: "fv_shop_pet_hat_trapper", category: "pet", price: 55, targetHeight: 110, anchor: "head", previewScale: 0.26 },
-  { id: "pet_bow_pink", label: "Sugar Pink Bow", textureKey: "fv_shop_pet_bow_pink", category: "pet", price: 25, targetHeight: 80, anchor: "head", previewScale: 0.15 },
+  { id: "pet_bow_pink", label: "Sugar Pink Bow", textureKey: "fv_shop_pet_bow_pink", category: "pet", price: 25, targetHeight: 80, anchor: "collar", previewScale: 0.15 },
   { id: "pet_tiara", label: "Frozen Princess Tiara", textureKey: "fv_shop_pet_tiara", category: "pet", price: 90, targetHeight: 100, anchor: "head", previewScale: 0.14 },
   { id: "pet_goggles", label: "Crystal Snow Goggles", textureKey: "fv_shop_pet_goggles", category: "pet", price: 60, targetHeight: 90, anchor: "face", previewScale: 0.15 },
-  { id: "pet_clip_snowflake", label: "Diamond Snowflake Clip", textureKey: "fv_shop_pet_clip_snowflake", category: "pet", price: 55, targetHeight: 80, anchor: "head", previewScale: 0.13 },
+  { id: "pet_clip_snowflake", label: "Diamond Snowflake Clip", textureKey: "fv_shop_pet_clip_snowflake", category: "pet", price: 55, targetHeight: 80, anchor: "collar", previewScale: 0.13 },
 
   // ---- Plants ----
   { id: "plant_thicket", label: "Glowing Snow Thicket", textureKey: "fv_shop_plant_thicket", category: "plant", price: 140, targetHeight: 260, visibleHeightFraction: 0.773 },

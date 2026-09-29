@@ -62,16 +62,14 @@ export class FrostedValleyProgressionService {
   }
 
   /**
-   * Every animal the player has actually met in the world so far — already
-   * rescued ones, plus the current one (its silhouette/letter is live even
-   * before it's rescued). Animals later than `currentAnimalIndex` are still
-   * unrevealed silhouettes the player hasn't unlocked yet. Used by the
-   * Shop's "try it out" animal picker so it only ever offers real, met
-   * animals — never a future locked one.
+   * Every animal that is genuinely unlocked: requirements restored, puzzle
+   * solved AND the unlock cinematic finished, so it is a real, active NPC in
+   * the valley (`rescued`). The current animal — still a silhouette — is NOT
+   * included. Used by the Shop's "try it out" picker so it only ever offers
+   * animals the player really has.
    */
   unlockedAnimals(): FrostedAnimalDef[] {
-    const idx = this.slice().currentAnimalIndex;
-    return this.catalog.filter((a) => a.order <= idx);
+    return this.catalog.filter((a) => this.isRescued(a.id));
   }
 
   isRescued(animalId: string): boolean {

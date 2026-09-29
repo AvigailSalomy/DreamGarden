@@ -154,11 +154,16 @@ describe("FrostedValleyProgressionService — Rabbit → Fox → Deer → Squirr
     expect(frosted.isCurrentAnimal("fv_fox")).toBe(false);
   });
 
-  it("unlockedAnimals starts as just the rabbit, and grows as animals are rescued", () => {
+  it("unlockedAnimals is empty at the start and only grows once an animal is fully rescued (never the current silhouette)", () => {
     const { frosted } = makeStack();
-    expect(frosted.unlockedAnimals().map((a) => a.id)).toEqual(["fv_rabbit"]);
+    expect(frosted.unlockedAnimals().map((a) => a.id)).toEqual([]);
     fullyCollectAndSolve(frosted, "fv_rabbit");
+    // restored + puzzle solved, but the unlock cinematic hasn't committed yet: still locked
+    expect(frosted.unlockedAnimals().map((a) => a.id)).toEqual([]);
     frosted.rescueAnimal("fv_rabbit");
+    expect(frosted.unlockedAnimals().map((a) => a.id)).toEqual(["fv_rabbit"]);
+    fullyCollectAndSolve(frosted, "fv_fox");
+    frosted.rescueAnimal("fv_fox");
     expect(frosted.unlockedAnimals().map((a) => a.id)).toEqual(["fv_rabbit", "fv_fox"]);
   });
 

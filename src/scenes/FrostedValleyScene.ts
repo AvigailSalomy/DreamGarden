@@ -15,7 +15,7 @@ import { FrostedAnimalNpc } from "../world/FrostedAnimalNpc";
 import { NATIVE_FACING, PERSONALITIES, areaAt, type Pt } from "../world/animalBehavior";
 import { FROSTED_ROAM } from "../data/frostedRoam";
 import { FrostedStoryDirector } from "../story/FrostedStoryDirector";
-import { storyFor } from "../data/frostedStory";
+import { SHOP_LOCKED_HINT, storyFor } from "../data/frostedStory";
 
 /**
  * Frosted Valley — a second, larger world built from the supplied production
@@ -411,6 +411,7 @@ export class FrostedValleyScene extends Phaser.Scene {
       triggerRestore: (animalId, resourceId) => this.triggerRestore(animalId, resourceId),
       openPuzzle: (animalId) => this.openPuzzle(animalId),
       showHint: (x, y, message) => this.showHint(x, y, message),
+      guideToShop: () => this.guideToShop(),
     });
     // NOT widened yet here — the opening reveal's frameWide() establishing
     // shot uses this same minZoom, so widening it before the reveal plays
@@ -624,6 +625,7 @@ export class FrostedValleyScene extends Phaser.Scene {
       await this.playUnlockCinematic(current);
       return;
     }
+    await this.story.shopIntro();
     if (await this.story.onSettled(current)) return;
     this.scheduleAutoRequest(current);
   }
@@ -2327,6 +2329,10 @@ export class FrostedValleyScene extends Phaser.Scene {
 
     if (Phaser.Math.Distance.Between(x, y, this.shopPos.x, this.shopPos.y - this.shopPos.radius / 2) < this.shopPos.radius) {
       Sfx.tap();
+      if (!frostedProgression.isRescued("fv_rabbit")) {
+        this.showHint(this.shopPos.x, this.shopPos.y - this.shopPos.radius, SHOP_LOCKED_HINT);
+        return;
+      }
       this.openShop();
       return;
     }
@@ -2386,6 +2392,22 @@ export class FrostedValleyScene extends Phaser.Scene {
   }
 
   /**
+   * The Shop introduction's "Take me there": pan to the Winter Market, open
+   * it, and hand control back once the player closes it again.
+   */
+  async guideToShop(): Promise<void> {
+    this.flowBusy = true;
+    this.camera.disable();
+    await this.camera.focusOn(this.shopPos.x, this.shopPos.y - this.shopPos.radius * 0.5, 1200, SETTLE_ZOOM);
+    await wait(this, 350);
+    const closed = new Promise<void>((resolve) => this.events.once(Phaser.Scenes.Events.RESUME, () => resolve()));
+    this.openShop();
+    await closed;
+    this.camera.enable();
+    this.flowBusy = false;
+  }
+
+  /**
    * Called by FrostedShopScene right after it closes on a BUY tap — never
    * spends a coin itself (see FrostedShopService.confirmPurchasePlacement,
    * called only from the placement controller's onConfirm below).
@@ -2411,6 +2433,8 @@ export class FrostedValleyScene extends Phaser.Scene {
   private startShopItemPlacement(itemId: string, startX: number, startY: number, dragToPlace: boolean): void {
     const def = frostedShop.def(itemId);
     if (!def) return;
+    // the wallet decides, not the caller: an unaffordable item never enters placement
+    if (!frostedShop.canAfford(itemId)) return;
     this.placementController?.start({
       textureKey: def.textureKey,
       targetHeight: def.targetHeight,
@@ -2703,6 +2727,9 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.camera.enable();
     this.flowBusy = false;
     await this.story.afterUnlock(animalId);
+    // the Rabbit is now a real animal in the valley: introduce the Winter Market
+    // (envelope -> shop tutorial) BEFORE moving on to the Fox's letter
+    if (animalId === "fv_rabbit") await this.story.shopIntro();
     await this.showNextAnimalLetterIfAny();
   }
 
