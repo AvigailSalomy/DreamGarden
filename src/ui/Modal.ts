@@ -3,7 +3,7 @@ import { bodyStyle, titleStyle } from "./theme";
 import { makePanel } from "./Panel";
 import { Button } from "./Button";
 import { makeIconButton } from "./hit";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 interface ConfirmOpts {
   title: string;
@@ -60,7 +60,7 @@ export function confirmModal(scene: Phaser.Scene, o: ConfirmOpts): void {
       variant: "cream",
       fontSize: 22,
       onClick: () => {
-        Sfx.tap();
+        audio.playSfx("ui_click");
         o.onCancel?.();
         close();
       },
@@ -102,7 +102,7 @@ export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
   layer.add(scrim);
 
   const panelW = Math.min(W - 48, 480);
-  const panelH = 300;
+  const panelH = 384;
   const card = scene.add.container(W / 2, H / 2);
   card.add(makePanel(scene, panelW, panelH));
   card.add(
@@ -114,22 +114,36 @@ export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
     layer.destroy();
   };
 
-  const soundBtn = new Button(scene, 0, -40, {
+  const soundBtn = new Button(scene, 0, -76, {
     width: panelW - 80,
     height: 70,
-    label: Sfx.enabled ? "Sound: On" : "Sound: Off",
+    label: audio.enabled ? "Sound: On" : "Sound: Off",
     variant: "cream",
     fontSize: 22,
     onClick: () => {
-      Sfx.enabled = !Sfx.enabled;
-      if (Sfx.enabled) Sfx.tap();
-      soundBtn.setLabel(Sfx.enabled ? "Sound: On" : "Sound: Off");
+      audio.setEnabled(!audio.enabled);
+      if (audio.enabled) audio.playSfx("ui_click");
+      soundBtn.setLabel(audio.enabled ? "Sound: On" : "Sound: Off");
     },
   });
   card.add(soundBtn);
 
+  const musicLabel = () => (audio.musicEnabled ? "Music: On" : "Music: Off");
+  const musicBtn = new Button(scene, 0, 8, {
+    width: panelW - 80,
+    height: 70,
+    label: musicLabel(),
+    variant: "cream",
+    fontSize: 22,
+    onClick: () => {
+      audio.setMusicEnabled(!audio.musicEnabled);
+      musicBtn.setLabel(musicLabel());
+    },
+  });
+  card.add(musicBtn);
+
   card.add(
-    new Button(scene, 0, 52, {
+    new Button(scene, 0, 96, {
       width: panelW - 80,
       height: 70,
       label: "Start New Garden",
@@ -142,7 +156,7 @@ export function settingsModal(scene: Phaser.Scene, o: SettingsOpts): void {
   );
 
   const x = makeIconButton(scene, panelW / 2 - 26, -panelH / 2 + 26, "✕", 22, () => {
-    Sfx.tap();
+    audio.playSfx("ui_click");
     close();
   });
   card.add(x);

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { COLORS, FONT_FAMILY, RADIUS } from "./theme";
 import { MIN_HIT } from "./hit";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 export interface ButtonOpts {
   width: number;
@@ -52,8 +52,8 @@ export class Button extends Phaser.GameObjects.Container {
     this.on("pointerdown", () => {
       scene.registry.set("pointerOnUI", true);
       if (!this.enabledState) return;
-      Sfx.unlock();
-      Sfx.tap();
+      audio.unlock();
+      audio.playSfx("ui_click");
       scene.tweens.add({ targets: this, scaleX: 0.95, scaleY: 0.95, duration: 90 });
     });
     this.on("pointerup", () => {

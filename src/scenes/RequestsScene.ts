@@ -8,6 +8,7 @@ import { bus, economy, requests as requestsService } from "../game/services";
 import { Sfx } from "../fx/Sfx";
 import { sparkleBurst } from "../fx/Particles";
 import type { RequestDef } from "../data/types";
+import { audio } from "../audio/AudioManager";
 
 interface RequestsInit {
   objectId: string;
@@ -297,7 +298,7 @@ export class RequestsScene extends Phaser.Scene {
   private close(): void {
     if (this.closing) return;
     this.closing = true;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     const finish = () => {
       this.scene.resume("Garden");
       bus.emit("requests:closed", { objectId: this.objectId });

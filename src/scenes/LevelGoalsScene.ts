@@ -6,8 +6,8 @@ import { makeIconButton } from "../ui/hit";
 import { requests as requestsService } from "../game/services";
 import { hashStr } from "../core/rng";
 import { generateLevel } from "../data/minigame";
-import { Sfx } from "../fx/Sfx";
 import type { LevelDef } from "../data/types";
+import { audio } from "../audio/AudioManager";
 
 interface LevelGoalsInit {
   objectId: string;
@@ -129,7 +129,7 @@ export class LevelGoalsScene extends Phaser.Scene {
   private play(levelDef: LevelDef): void {
     if (this.closing) return;
     this.closing = true;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     this.scene.launch("BunnyHeist", { objectId: this.objectId, level: levelDef });
     this.scene.stop();
   }
@@ -137,7 +137,7 @@ export class LevelGoalsScene extends Phaser.Scene {
   private close(): void {
     if (this.closing) return;
     this.closing = true;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     this.tweens.add({
       targets: this.root,
       alpha: 0,

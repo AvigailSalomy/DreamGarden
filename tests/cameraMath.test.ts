@@ -104,8 +104,9 @@ describe("computeMinZoom (responsive wide-view minimum)", () => {
   });
 
   it("uses the min of the two viewport/overview fits", () => {
-    const z = computeMinZoom(1000, 1000);
-    expect(z).toBeCloseTo(Math.min(1000 / OVERVIEW_W, 1000 / OVERVIEW_H));
+    // a viewport whose fit sits above the ZOOM_MIN floor (so the floor doesn't mask the fit)
+    const z = computeMinZoom(1600, 1600);
+    expect(z).toBeCloseTo(Math.min(1600 / OVERVIEW_W, 1600 / OVERVIEW_H));
   });
 });
 

@@ -11,6 +11,8 @@ import { RESOURCES } from "../data/resources";
 import { generateMaze, MAZE_LEVELS, type MazeGrid, type MazeLevelConfig } from "../data/maze";
 import { Sfx } from "../fx/Sfx";
 import { sparkleBurst, petalPuff } from "../fx/Particles";
+import { audio } from "../audio/AudioManager";
+import { facingFlipX, moveWithCollision } from "../core/mazeMovement";
 
 export interface MazeInit {
   objectId: string;
@@ -112,6 +114,7 @@ export class GardenMazeScene extends Phaser.Scene {
 
   private player!: Phaser.GameObjects.Container;
   private playerBody!: Phaser.GameObjects.Image;
+  private nativeFacing: "left" | "right" = "right";
   private px = 0;
   private py = 0;
 
@@ -191,6 +194,7 @@ export class GardenMazeScene extends Phaser.Scene {
     this.px = spawn.tx * CELL + CELL / 2;
     this.py = spawn.ty * CELL + CELL / 2;
     this.playerBody = this.add.image(0, 0, def?.garden_sprite ?? "dg_rabbit").setOrigin(0.5, 0.72);
+    this.nativeFacing = def?.sprite_facing ?? "right";
     const targetH = CELL * 0.82;
     this.playerBody.setScale(targetH / this.playerBody.height);
     this.player = this.add.container(this.px, this.py, [this.playerBody]);
@@ -209,6 +213,31 @@ export class GardenMazeScene extends Phaser.Scene {
     this.positionHud(this.baseZoom);
 
     this.cameras.main.fadeIn(220, 36, 26, 46);
+
+    if (import.meta.env.DEV) {
+      // Diagnostics for an unreproduced report of "Right Arrow sometimes stops
+      // moving the player". Call __dgMazeInput() in the console the moment it
+      // happens: it tells an input-state cause (e.g. a Left key Phaser still
+      // thinks is held, which cancels Right) apart from a position-specific
+      // collision cause (lastBlocked shows which probe hit a wall where).
+      (window as unknown as Record<string, unknown>).__dgMazeInput = () => ({
+        keys: this.cursors
+          ? {
+              left: this.cursors.left.isDown,
+              right: this.cursors.right.isDown,
+              up: this.cursors.up.isDown,
+              down: this.cursors.down.isDown,
+              A: this.wasd?.A.isDown,
+              D: this.wasd?.D.isDown,
+            }
+          : null,
+        padDir: this.padDir,
+        dir: this.readInputDir(),
+        finished: this.finished,
+        player: { x: Math.round(this.px), y: Math.round(this.py), tile: [Math.floor(this.px / CELL), Math.floor(this.py / CELL)] },
+        lastBlocked: this.lastBlocked,
+      });
+    }
   }
 
   /* ---------------- world building ---------------- */
@@ -491,33 +520,16 @@ export class GardenMazeScene extends Phaser.Scene {
 
   /* ---------------- collision helpers ---------------- */
 
-  private isWallAt(worldX: number, worldY: number): boolean {
-    const tx = Math.floor(worldX / CELL);
-    const ty = Math.floor(worldY / CELL);
-    if (ty < 0 || ty >= this.grid.tileRows || tx < 0 || tx >= this.grid.tileCols) return true;
-    return this.grid.walls[ty][tx];
-  }
+  /** DEV diagnostics only (see __dgMazeInput): the most recent sideways move a wall refused. */
+  private lastBlocked?: { dx: number; at: [number, number]; t: number };
 
-  private circleHitsWall(x: number, y: number, r: number): boolean {
-    const pts = [
-      [x - r, y],
-      [x + r, y],
-      [x, y - r],
-      [x, y + r],
-      [x - r * 0.7, y - r * 0.7],
-      [x + r * 0.7, y - r * 0.7],
-      [x - r * 0.7, y + r * 0.7],
-      [x + r * 0.7, y + r * 0.7],
-    ];
-    return pts.some(([px, py]) => this.isWallAt(px, py));
-  }
-
+  /** Shared, unit-tested collision + corner-alignment (core/mazeMovement.ts). */
   private moveWithCollision(x: number, y: number, dx: number, dy: number, r: number): { x: number; y: number } {
-    let nx = x + dx;
-    if (this.circleHitsWall(nx, y, r)) nx = x;
-    let ny = y + dy;
-    if (this.circleHitsWall(nx, ny, r)) ny = y;
-    return { x: nx, y: ny };
+    const moved = moveWithCollision(this.grid, CELL, x, y, dx, dy, r);
+    if (import.meta.env.DEV && dx !== 0 && moved.x === x && moved.y === y) {
+      this.lastBlocked = { dx: Math.sign(dx), at: [Math.round(x), Math.round(y)], t: Math.round(this.time.now) };
+    }
+    return moved;
   }
 
   /* ---------------- game loop ---------------- */
@@ -527,13 +539,19 @@ export class GardenMazeScene extends Phaser.Scene {
     const dt = Math.min(delta, 45) / 1000;
 
     const dir = this.readInputDir();
+    if (import.meta.env.DEV && this.cursors?.left.isDown && this.cursors.right.isDown) {
+      // both held cancels to x = 0 — the input-state signature of the reported bug
+      console.debug("[maze] Left and Right both read as held", window.performance.now().toFixed(0));
+    }
     if (dir.x !== 0 || dir.y !== 0) {
       const step = { x: dir.x * PLAYER_SPEED * dt, y: dir.y * PLAYER_SPEED * dt };
       const moved = this.moveWithCollision(this.px, this.py, step.x, step.y, PLAYER_R);
       this.px = moved.x;
       this.py = moved.y;
       this.player.setPosition(this.px, this.py);
-      this.playerBody.setFlipX(dir.x < 0 ? true : dir.x > 0 ? false : this.playerBody.flipX);
+      // face the horizontal direction of travel, relative to the art's own
+      // native facing (the deer's sprite faces left, the others right)
+      this.playerBody.setFlipX(facingFlipX(this.nativeFacing, dir.x, this.playerBody.flipX));
     }
 
     this.updateEnemies(dt, time);
@@ -629,14 +647,14 @@ export class GardenMazeScene extends Phaser.Scene {
       if (c.kind === "coin") {
         const value = MAZE_ECONOMY[this.cfg.difficulty].value;
         if (this.rewards.collect(`${c.x},${c.y}`, value)) {
-          Sfx.coin();
+          audio.playSfx("coin_reward");
           sparkleBurst(this, c.x, c.y, 7, 24);
           const pop = this.add.text(c.x, c.y - 16, `+${value}`, { ...labelStyle(20), color: "#ffe39a", stroke: "#765020", strokeThickness: 3 }).setOrigin(0.5).setDepth(100);
           this.tweens.add({ targets: pop, y: c.y - 54, alpha: 0, duration: 650, onComplete: () => pop.destroy() });
         }
       } else if (c.kind === "target") {
         this.collectedTarget++;
-        Sfx.coin();
+        audio.playSfx("resource_collect");
         sparkleBurst(this, c.x, c.y, 10, 30);
         if (this.collectedTarget >= this.mi.amount) {
           this.time.delayedCall(150, () => this.onWin());
@@ -723,7 +741,7 @@ export class GardenMazeScene extends Phaser.Scene {
 
   private confirmAbandon(): void {
     if (this.finished) return;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     this.finished = true;
     this.showEndPanel({
       title: "Leave the hunt?",

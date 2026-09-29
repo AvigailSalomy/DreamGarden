@@ -12,6 +12,7 @@ function freshShopState(): ShopSaveState {
     ownedAccessories: [],
     equippedAccessories: {},
     mysteryGiftsOpened: 0,
+    hintsOwned: 0,
   };
 }
 
@@ -80,11 +81,18 @@ export function migrate(data: unknown): SaveState {
     restoredSources:
       d.restoredSources && typeof d.restoredSources === "object" ? d.restoredSources : {},
     stats: { ...base.stats, ...(d.stats ?? {}) },
-    shop: {
+    shop: sanitizeShop({
       ...base.shop,
       ...(d.shop && typeof d.shop === "object" ? d.shop : {}),
-    },
+    }),
   };
+}
+
+/** Older saves have no hint inventory (-> 0); never let a bad value go negative/fractional. */
+function sanitizeShop(shop: ShopSaveState): ShopSaveState {
+  const h = shop.hintsOwned;
+  shop.hintsOwned = typeof h === "number" && Number.isFinite(h) && h > 0 ? Math.floor(h) : 0;
+  return shop;
 }
 
 /**

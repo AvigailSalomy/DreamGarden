@@ -21,7 +21,9 @@ export function startGame(): Phaser.Game {
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent: "app",
-    backgroundColor: "#c9b8e8",
+    // grass green, not the old lavender: wherever no layer is drawn (e.g. past
+    // the garden's edge on a very wide screen) must never read as a flat panel
+    backgroundColor: "#9cbf7a",
     roundPixels: false,
     antialias: true,
     scale: {

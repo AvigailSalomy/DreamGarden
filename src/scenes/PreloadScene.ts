@@ -126,8 +126,8 @@ export class PreloadScene extends Phaser.Scene {
       "hedgehog_mushroom_log_restored",
       "hedgehog_herb_patch_damaged",
       "hedgehog_herb_patch_restored",
-      "squirrel_acorn_oak_damaged",
-      "squirrel_acorn_oak_restored",
+      "squirrel_acorn_tree_damaged",
+      "squirrel_acorn_tree_restored",
       "squirrel_nut_cache_damaged",
       "squirrel_nut_cache_restored",
       "squirrel_apple_tree_damaged",
@@ -166,6 +166,8 @@ export class PreloadScene extends Phaser.Scene {
     dg("vegetation/flower_arch_01");
     dg("vegetation/vegetation_01");
     dg("vegetation/vegetation_04");
+    dg("vegetation/vegetation_03"); // lantern blossom tree (grove, replaced the bare oak)
+    dg("vegetation/vegetation_05"); // stone garden well (former fountain clearing)
 
     dg("nature/rock_large_01");
     dg("nature/rock_medium_01");
@@ -195,6 +197,7 @@ export class PreloadScene extends Phaser.Scene {
     dg("foreground/foreground_03");
 
     dg("terrain/terrain_04");
+    dg("terrain/soil_patch_01"); // soft soil decal (cut from the apple-tree ground disc) under Fox's grape vine
     dg("terrain/grass_ground"); // the supplied painted ground reference — the world's base terrain
 
     // ---- Dream Garden Shop (data/shop.ts) — building + wearable accessories +
@@ -202,7 +205,6 @@ export class PreloadScene extends Phaser.Scene {
     dg("accessories/shop_building");
     dg("accessories/mystery_gift");
     dg("accessories/accessory_garden_hat");
-    dg("accessories/accessory_flower_crown");
     dg("accessories/accessory_round_glasses");
     dg("accessories/accessory_glasses_nibs"); // rabbit-specific Round Glasses art — see shop.ts accessoryIconFor()
     dg("accessories/accessory_flower_bow");
@@ -218,6 +220,7 @@ export class PreloadScene extends Phaser.Scene {
     // Glasses and Fairy Sparkles in the active catalog.
     dg("accessories/accessory_blue_bow");
     dg("accessories/accessory_magic_wand");
+    dg("accessories/accessory_magic_flower"); // replaced Flower Crown in the active catalog
 
     // fx + ui
     svg("spark", 48, 48);

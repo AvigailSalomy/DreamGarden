@@ -7,6 +7,7 @@ import { bus, requests as requestsService } from "../game/services";
 import { Sfx } from "../fx/Sfx";
 import { dustRing, petalPuff } from "../fx/Particles";
 import type { LevelDef } from "../data/types";
+import { audio } from "../audio/AudioManager";
 
 interface CarrotDashInit {
   objectId: string;
@@ -559,7 +560,7 @@ export class CarrotDashScene extends Phaser.Scene {
     const next = Phaser.Math.Clamp(this.playerLane + Math.sign(dir), 0, LANES - 1);
     if (next === this.playerLane) return;
     this.playerLane = next;
-    Sfx.tap();
+    audio.playSfx("ui_click");
 
     this.tweens.add({
       targets: this.player,

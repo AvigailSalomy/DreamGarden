@@ -107,6 +107,33 @@ export class ShopService {
     return { ok: true };
   }
 
+  /* ---- Puzzle Hints: a consumable, saved with the rest of the Shop state ---- */
+
+  get hintsOwned(): number {
+    return this.s.hintsOwned;
+  }
+
+  get hintCost(): number {
+    return SHOP_ECONOMY.puzzleHint;
+  }
+
+  buyHint(): { ok: boolean; reason?: string } {
+    if (!this.economy.spend(this.hintCost, "shop_hint")) return { ok: false, reason: "cannot afford" };
+    this.s.hintsOwned += 1;
+    this.save.saveNow();
+    this.bus.emit("hints:changed", { total: this.s.hintsOwned });
+    return { ok: true };
+  }
+
+  /** Spend exactly one owned hint. False (and no change) when none are left. */
+  useHint(): boolean {
+    if (this.s.hintsOwned <= 0) return false;
+    this.s.hintsOwned -= 1;
+    this.save.saveNow();
+    this.bus.emit("hints:changed", { total: this.s.hintsOwned });
+    return true;
+  }
+
   equippedFor(animalId: string): Record<string, string> {
     return this.s.equippedAccessories[animalId] ?? {};
   }

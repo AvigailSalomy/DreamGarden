@@ -15,11 +15,12 @@ export const ZOOM_MAX = 1.5;
 /** Absolute lower bound; the *effective* minimum is computed from the viewport. */
 export const ZOOM_MIN = 0.32;
 
-/** The chunk of world we want a player to be able to see at the widest zoom —
- *  wide enough on the opening establishing view to read as "this is my whole
- *  neglected garden, here's its geography" rather than one cropped corner. */
-export const OVERVIEW_W = 2400;
-export const OVERVIEW_H = 1900;
+/** The chunk of world we want a player to be able to see at the widest zoom:
+ *  the WHOLE playable garden (full world width; ground from the horizon down),
+ *  so a fully zoomed-out view is a real overview of every habitat. Small
+ *  screens still bottom out at ZOOM_MIN and pan to see the rest. */
+export const OVERVIEW_W = 3200;
+export const OVERVIEW_H = 2000;
 
 /**
  * A responsive minimum zoom: small enough that most of the neglected garden fits

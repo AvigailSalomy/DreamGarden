@@ -6,6 +6,8 @@ import { confirmModal, settingsModal } from "../ui/Modal";
 import { safeInsets } from "../util/safeArea";
 import { bus, economy, progression, resetGarden } from "../game/services";
 import { Sfx } from "../fx/Sfx";
+import { HabitatProgressBar } from "../ui/HabitatProgressBar";
+import { audio } from "../audio/AudioManager";
 
 /** Screen-fixed HUD. Its camera never pans or zooms, so it stays put over the garden. */
 export class UIScene extends Phaser.Scene {
@@ -14,6 +16,7 @@ export class UIScene extends Phaser.Scene {
 
   private coinText!: Phaser.GameObjects.Text;
   private coinPill!: Phaser.GameObjects.Container;
+  private habitatBar!: HabitatProgressBar;
   private gear!: Phaser.GameObjects.Text;
 
   private card!: Phaser.GameObjects.Container;
@@ -41,6 +44,7 @@ export class UIScene extends Phaser.Scene {
     this.displayedCoins = economy.coins;
     this.buildCoinPill();
     this.buildGear();
+    this.habitatBar = new HabitatProgressBar(this).setDepth(100);
     this.buildTaskCard();
     this.layout();
     this.setTaskFromProgression();
@@ -52,10 +56,14 @@ export class UIScene extends Phaser.Scene {
       }),
     );
     this.offFns.push(bus.on("progress:updated", () => this.drawPips()));
+    // habitat bar: derived from saved restoration state. A restore is NOT
+    // reflected on the save event itself — GardenScene fills the segment in
+    // sync with the world reveal (presentRestoreThenReturn → refreshHabitatBar).
     this.offFns.push(bus.on("requests:closed", () => this.setTaskFromProgression()));
     this.offFns.push(
       bus.on("reveal:done", () => {
         this.revealing = false;
+        this.habitatBar.refresh(false); // rescued → switch to the next active animal
         this.setTaskFromProgression();
         this.showCard();
       }),
@@ -99,6 +107,17 @@ export class UIScene extends Phaser.Scene {
 
     this.gear.setPosition(W - inset.right - 24, inset.top + 24);
 
+    // Habitat bar: top-centre between the coin pill and the gear when there's
+    // room; on narrow (phone) screens it drops to a second row under them.
+    const barW = HabitatProgressBar.WIDTH;
+    const topRowRoom = W - inset.left - inset.right - 2 * (16 + pillW + 16);
+    if (topRowRoom >= barW) {
+      this.habitatBar.setScale(1).setPosition(W / 2, inset.top + 10 + pillH / 2);
+    } else {
+      const s = Math.min(1, (W - inset.left - inset.right - 24) / barW);
+      this.habitatBar.setScale(s).setPosition(W / 2, inset.top + 10 + pillH + 12 + 26 * s);
+    }
+
     this.cardW = Math.min(W - 24, 560);
     this.rebuildCard();
     this.card.setPosition(W / 2, this.cardHidden ? this.scale.height + 200 : this.cardRestY);
@@ -128,8 +147,8 @@ export class UIScene extends Phaser.Scene {
     this.gear.on("pointerout", () => this.registry.set("pointerOnUI", false));
     this.gear.on("pointerdown", () => {
       if (this.revealing) return;
-      Sfx.unlock();
-      Sfx.tap();
+      audio.unlock();
+      audio.playSfx("ui_click");
       settingsModal(this, { onStartNew: () => this.confirmNewGarden() });
     });
   }
@@ -227,7 +246,7 @@ export class UIScene extends Phaser.Scene {
           onComplete: () => {
             c.destroy();
             landed++;
-            Sfx.coin();
+            audio.playSfx("coin_reward");
             this.bounceCoinPill();
             const shown = startDisplay + Math.round(((total - startDisplay) * landed) / n);
             this.displayedCoins = shown;
@@ -441,7 +460,7 @@ export class UIScene extends Phaser.Scene {
   /** Fade the persistent HUD chrome (coin pill, gear) in/out — used by GardenScene's
    *  entry zoom-reveal so the wide "look at this whole place" moment isn't cluttered. */
   setHudVisible(visible: boolean, animate = true): void {
-    const targets = [this.coinPill, this.gear];
+    const targets = [this.coinPill, this.gear, this.habitatBar];
     this.tweens.killTweensOf(targets);
     if (!animate) {
       targets.forEach((t) => t.setAlpha(visible ? 1 : 0));
@@ -465,7 +484,7 @@ export class UIScene extends Phaser.Scene {
 
   nudgePlay(): void {
     if (this.cardHidden || this.revealing) return;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     this.tweens.add({
       targets: this.playBtn,
       scaleX: 1.14,
@@ -474,6 +493,40 @@ export class UIScene extends Phaser.Scene {
       yoyo: true,
       repeat: 1,
       ease: "Sine.easeInOut",
+    });
+  }
+
+  /** Re-derive the habitat progress bar from saved state (e.g. the moment
+   *  progression hands off to the next animal). */
+  refreshHabitatBar(animate = false): void {
+    this.habitatBar.refresh(animate);
+  }
+
+  /* ---------------- caption ---------------- */
+
+  /** A larger centred title card for cinematic beats (e.g. the end of the
+   *  New Game garden tour). Resolves once it has faded back out. */
+  showCaption(text: string, holdMs = 1600): Promise<void> {
+    const t = this.add.container(this.scale.width / 2, this.scale.height * 0.3).setDepth(9800).setAlpha(0);
+    const label = this.add
+      .text(0, 0, text, { ...titleStyle(Math.min(38, this.scale.width * 0.075)), align: "center", wordWrap: { width: this.scale.width - 80 } })
+      .setOrigin(0.5);
+    t.add([makePanel(this, label.width + 72, label.height + 44, { radius: 34 }), label]);
+    t.setScale(0.92);
+    return new Promise((resolve) => {
+      this.tweens.add({
+        targets: t,
+        alpha: 1,
+        scale: 1,
+        duration: 420,
+        ease: "Back.easeOut",
+        hold: holdMs,
+        yoyo: true,
+        onComplete: () => {
+          t.destroy();
+          resolve();
+        },
+      });
     });
   }
 

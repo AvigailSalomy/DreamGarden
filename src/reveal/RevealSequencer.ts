@@ -3,7 +3,7 @@ import type { RevealHost } from "./types";
 import type { GardenObjectDef } from "../data/types";
 import { ENTRANCE_PRESETS } from "./entrancePresets";
 import { gatherGlow, sparkleBurst } from "../fx/Particles";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 const wait = (scene: Phaser.Scene, ms: number) =>
   new Promise<void>((res) => scene.time.delayedCall(ms, res));
@@ -42,7 +42,7 @@ export class RevealSequencer {
 
       // Animals already live here. Rescue celebrates the same visible resident;
       // only non-animal restorations use a silhouette/entrance transition.
-      Sfx.fanfare();
+      audio.playSfx("animal_rescue");
       if (def.category === "animal") {
         host.pauseIdle(def.id);
         view = host.spawnObjectView(def, false);

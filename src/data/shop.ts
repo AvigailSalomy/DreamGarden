@@ -108,7 +108,6 @@ export const ANIMAL_BODY_ANCHORS: Record<string, BodyAnchors> = {
  *  scripts/process_dg_assets.py's trim step if these PNGs are reprocessed. */
 export const ACCESSORY_VISIBLE_BOUNDS: Record<string, { cx: number; cy: number; w: number; h: number }> = {
   garden_hat: { cx: 0.5, cy: 0.5, w: 0.9927, h: 0.9896 },
-  flower_crown: { cx: 0.5, cy: 0.5007, w: 0.9927, h: 0.9907 },
   round_glasses: { cx: 0.5, cy: 0.499, w: 0.9945, h: 0.986 },
   flower_bow: { cx: 0.5, cy: 0.5, w: 0.9891, h: 0.9837 },
   // Same values as flower_bow, deliberately — see ACCESSORY_FITS's blue_bow
@@ -165,6 +164,11 @@ const COMPANION_FITS: Record<string, AccessoryFit> = {
   // so the star tip already points up without any rotation) placed beside
   // the animal at roughly mid-height, same generic-across-animals approach.
   magic_wand: { xOffset: 1.15, yOffset: 0.5, scale: 0.6, rotation: 0, layer: "front" },
+  // Magic Flower is HELD, like the rabbit/squirrel wand overrides: the stem's
+  // lower end (at ~26%,95% of the art) sits on the front paws and the bloom
+  // tilts up/outward, clear of the face. Tuned on Nibs's front-paw pose; the
+  // other animals override it below where their paws/face sit elsewhere.
+  magic_flower: { xOffset: 0.841, yOffset: 0.715, scale: 0.39, rotation: 28, layer: "front" },
 };
 
 // blue_bow is a strict geometric/color twin of flower_bow (see shop
@@ -187,6 +191,7 @@ export const ACCESSORY_FITS: Partial<Record<string, Partial<Record<string, Acces
     blue_bow: BLUE_BOW_FITS.bird,
     magic_crown: { xOffset: 0.65, yOffset: 0.08, scale: 0.55, rotation: 0, layer: "front" },
     ...COMPANION_FITS,
+    magic_flower: { xOffset: 0.828, yOffset: 0.678, scale: 0.283, rotation: 12, layer: "front" }, // presented at the lower-front body
   },
   hedgehog: {
     garden_hat: { xOffset: 0.76, yOffset: 0.26, scale: 0.3, rotation: 0, layer: "front" },
@@ -194,6 +199,7 @@ export const ACCESSORY_FITS: Partial<Record<string, Partial<Record<string, Acces
     blue_bow: BLUE_BOW_FITS.hedgehog,
     magic_crown: { xOffset: 0.72, yOffset: 0.18, scale: 0.42, rotation: 0, layer: "front" },
     ...COMPANION_FITS,
+    magic_flower: { xOffset: 0.998, yOffset: 0.6, scale: 0.263, rotation: 32, layer: "front" }, // stem at the front paw, bloom past the snout
   },
   squirrel: {
     magic_crown: { xOffset: 0.72, yOffset: 0.23, scale: 0.4, rotation: 0, layer: "front" },
@@ -203,14 +209,17 @@ export const ACCESSORY_FITS: Partial<Record<string, Partial<Record<string, Acces
     // Override the shared wand fit (sat at the mouth): handle through the
     // front paws, star out past the cheek. Must stay AFTER the spread.
     magic_wand: { xOffset: 0.93, yOffset: 0.73, scale: 0.45, rotation: 0, layer: "front" },
+    magic_flower: { xOffset: 0.978, yOffset: 0.683, scale: 0.305, rotation: 32, layer: "front" }, // same idea as the wand: stem through the paws
   },
   fox: {
     magic_crown: { xOffset: 0.82, yOffset: 0.1, scale: 0.36, rotation: 0, layer: "front" },
     ...COMPANION_FITS,
+    magic_flower: { xOffset: 0.858, yOffset: 0.658, scale: 0.242, rotation: 40, layer: "front" }, // at the chest, below the muzzle
   },
   deer: {
     magic_crown: { xOffset: 0.25, yOffset: 0.06, scale: 0.5, rotation: 0, layer: "front" },
     ...COMPANION_FITS,
+    magic_flower: { xOffset: 0.426, yOffset: 0.532, scale: 0.399, rotation: 0, layer: "front" }, // stem at the chest/front leg, below the face
   },
   rabbit: {
     // Uses the Nibs-specific art (ANIMAL_ACCESSORY_ART below), calibrated
@@ -384,7 +393,6 @@ export const DECOR_CATALOG: DecorCatalogItem[] = [
 
 export const ACCESSORY_CATALOG: AccessoryCatalogItem[] = [
   { id: "garden_hat", label: "Garden Hat", icon: "dg_accessory_garden_hat", cost: 300, slot: "head", rarity: "common" },
-  { id: "flower_crown", label: "Flower Crown", icon: "dg_accessory_flower_crown", cost: 300, slot: "head", rarity: "common" },
   { id: "flower_bow", label: "Flower Bow", icon: "dg_accessory_flower_bow", cost: 200, slot: "head", rarity: "common" },
   { id: "magic_butterfly", label: "Magic Butterfly", icon: "dg_accessory_magic_butterfly", cost: 450, slot: "special", rarity: "rare" },
   { id: "magic_crown", label: "Magic Crown", icon: "dg_accessory_magic_crown_rare", cost: 600, slot: "head", rarity: "magical" },
@@ -398,6 +406,9 @@ export const ACCESSORY_CATALOG: AccessoryCatalogItem[] = [
   // Bow. Magic Wand replaced Fairy Sparkles (kept its price/slot).
   { id: "blue_bow", label: "Blue Bow", icon: "dg_accessory_blue_bow", cost: 250, slot: "head", rarity: "common" },
   { id: "magic_wand", label: "Magic Wand", icon: "dg_accessory_magic_wand", cost: 350, slot: "special", rarity: "rare" },
+  // Magic Flower replaced Flower Crown (kept its price). Held in the front
+  // paws like Magic Wand, not worn — see COMPANION_FITS.magic_flower.
+  { id: "magic_flower", label: "Magic Flower", icon: "dg_accessory_magic_flower", cost: 300, slot: "special", rarity: "common" },
 ];
 
 export function decorItem(id: string): DecorCatalogItem | undefined {

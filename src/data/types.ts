@@ -85,6 +85,9 @@ export interface GardenObjectDef {
   tier: "common" | "medium" | "special";
 
   garden_sprite: string;
+  /** Which way the character in `garden_sprite` natively faces (default
+   *  "right"). Used wherever the sprite is flipped to face its movement. */
+  sprite_facing?: "left" | "right";
   garden_position: { x: number; y: number };
   garden_scale: number;
   region: RegionId;
@@ -191,6 +194,8 @@ export interface ShopSaveState {
   /** animalId -> slot -> accessoryId currently worn in that slot. */
   equippedAccessories: Record<string, Record<string, string>>;
   mysteryGiftsOpened: number;
+  /** Purchased Puzzle Hints not yet used (spent one per rescue puzzle, max). */
+  hintsOwned: number;
 }
 
 export interface MiniGameProgress {

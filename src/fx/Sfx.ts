@@ -29,6 +29,16 @@ class SfxEngine {
     this.ensure();
   }
 
+  /** A single soft enveloped tone — the building block AudioManager composes
+   *  its named SFX from. */
+  tone(
+    freq: number,
+    dur: number,
+    opts: { type?: OscillatorType; vol?: number; slideTo?: number; delay?: number } = {},
+  ): void {
+    this.blip(freq, dur, opts);
+  }
+
   private blip(
     freq: number,
     dur: number,

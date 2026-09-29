@@ -8,6 +8,7 @@ import type { PieceEdges } from "./jigsaw";
 import { PuzzleTile } from "./PuzzleTile";
 import { petalPuff, sparkleBurst } from "../fx/Particles";
 import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 export interface PuzzleBoardOpts {
   texKey: string;
@@ -96,10 +97,13 @@ export class PuzzleBoard {
     g.fillStyle(0x9a7048, 1);
     g.fillRoundedRect(centerX - boardSize / 2 - 6, centerY - boardSize / 2 - 6, boardSize + 12, boardSize + 12, RADIUS.panel);
 
+    // No preview of the finished picture under the pieces — the player
+    // rebuilds the animal from the pieces alone (Hint still helps once).
     this.ghost = this.scene.add
       .image(centerX, centerY, this.o.texKey)
       .setDisplaySize(boardSize, boardSize)
-      .setAlpha(0.13)
+      .setAlpha(0)
+      .setVisible(false)
       .setDepth(3);
 
     this.hintG = this.scene.add.graphics().setDepth(60);
@@ -203,16 +207,6 @@ export class PuzzleBoard {
         slot.lineStyle(2, 0x7c5a3f, 0.5);
         slot.strokePoints(pts, true);
 
-        // faint ghost of the actual artwork — reuses the SAME baked, already
-        // shape-clipped piece texture the loose piece displays, just dimmed
-        const ghostKey = this.jkey(index);
-        if (this.scene.textures.exists(ghostKey)) {
-          this.scene.add
-            .image(x, y, ghostKey)
-            .setDisplaySize(this.frameW, this.frameH)
-            .setAlpha(0.1)
-            .setDepth(2.5);
-        }
       }
     }
   }
@@ -301,6 +295,13 @@ export class PuzzleBoard {
    *  stronger ghost-copy demonstration; a different piece resets to level 1). */
   private hintedPieceIndex: number | null = null;
   private hintLevel = 0;
+  /** One hint per puzzle: a board is built fresh for every puzzle attempt,
+   *  so this flag is naturally scoped to the current puzzle. */
+  private hintUsed = false;
+
+  get hintAvailable(): boolean {
+    return !this.hintUsed;
+  }
 
   /**
    * Hint teaches, it doesn't solve: (1) the one loose piece it's talking
@@ -310,16 +311,18 @@ export class PuzzleBoard {
    * still drags the piece over themselves. Pressing Hint again for the same
    * piece adds a translucent ghost of it gliding to the slot and back.
    */
-  hint(): void {
+  hint(): boolean {
+    if (this.hintUsed) return false;
     const t = this.tiles.find((x) => !x.placed);
-    if (!t) return;
+    if (!t) return false;
     const cell = this.cells.find((c) => c.index === t.solutionIndex);
-    if (!cell) return;
+    if (!cell) return false;
+    this.hintUsed = true;
 
     this.hintLevel = this.hintedPieceIndex === t.solutionIndex ? this.hintLevel + 1 : 1;
     this.hintedPieceIndex = t.solutionIndex;
 
-    Sfx.sparkle();
+    audio.playSfx("puzzle_hint");
     this.hintG.clear();
 
     // 1) the specific piece glows; every other unplaced piece dims briefly
@@ -364,6 +367,7 @@ export class PuzzleBoard {
     if (this.hintLevel >= 2) {
       this.scene.time.delayedCall(1000, () => this.playGhostHint(t, cell));
     }
+    return true;
   }
 
   /** A few sparkles staggered along the piece→slot line — a visual cue to
@@ -453,7 +457,7 @@ export class PuzzleBoard {
       repeat: 1,
     });
 
-    Sfx.complete();
+    audio.playSfx("puzzle_complete");
     sparkleBurst(this.scene, centerX, centerY, 24, boardSize / 2);
     petalPuff(this.scene, centerX, centerY - 30, 14);
     this.scene.cameras.main.flash(200, 255, 253, 245);

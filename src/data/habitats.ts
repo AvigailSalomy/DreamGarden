@@ -52,12 +52,12 @@ export const RABBIT_HABITAT: HabitatDef = {
   animalId: "rabbit",
   name: "Rabbit's Meadow",
   region: "animalMeadow",
-  homePosition: { x: 900, y: 1500 },
+  homePosition: { x: 922, y: 1545 },
   resources: [
     {
       id: "rabbit_carrot_patch",
       label: "Carrot Patch",
-      position: { x: 1080, y: 1600 },
+      position: { x: 1095, y: 1595 },
       scale: 0.202,
       shadowW: 160,
       damagedAsset: "rabbit_carrot_patch_damaged",
@@ -68,7 +68,7 @@ export const RABBIT_HABITAT: HabitatDef = {
     {
       id: "rabbit_herb_patch",
       label: "Herb Patch",
-      position: { x: 760, y: 1560 },
+      position: { x: 750, y: 1595 },
       scale: 0.182,
       shadowW: 140,
       damagedAsset: "rabbit_herb_patch_damaged",
@@ -79,7 +79,7 @@ export const RABBIT_HABITAT: HabitatDef = {
     {
       id: "rabbit_wildflower_patch",
       label: "Wildflower Patch",
-      position: { x: 990, y: 1350 },
+      position: { x: 960, y: 1375 },
       scale: 0.163,
       shadowW: 120,
       damagedAsset: "rabbit_wildflower_patch_damaged",
@@ -100,7 +100,7 @@ export const BIRD_HABITAT: HabitatDef = {
     {
       id: "bird_blossom_tree",
       label: "Blossom Tree",
-      position: { x: 1700, y: 1110 },
+      position: { x: 1710, y: 1085 },
       scale: 0.192,
       shadowW: 170,
       damagedAsset: "bird_blossom_tree_damaged",
@@ -144,12 +144,12 @@ export const HEDGEHOG_HABITAT: HabitatDef = {
   // visually intruded on this habitat at its old, too-close position. That
   // ghost is pre-existing, correct behaviour; the fix is giving this habitat
   // its own clear footprint, not touching the marker itself.
-  homePosition: { x: 560, y: 2080 },
+  homePosition: { x: 572, y: 2110 },
   resources: [
     {
       id: "hedgehog_mossy_log",
       label: "Mossy Log",
-      position: { x: 400, y: 2140 },
+      position: { x: 400, y: 2170 },
       scale: 0.163,
       shadowW: 150,
       damagedAsset: "hedgehog_mossy_log_damaged",
@@ -160,7 +160,7 @@ export const HEDGEHOG_HABITAT: HabitatDef = {
     {
       id: "hedgehog_mushroom_log",
       label: "Mushroom Log",
-      position: { x: 740, y: 2180 },
+      position: { x: 740, y: 2170 },
       scale: 0.154,
       shadowW: 140,
       damagedAsset: "hedgehog_mushroom_log_damaged",
@@ -171,7 +171,7 @@ export const HEDGEHOG_HABITAT: HabitatDef = {
     {
       id: "hedgehog_herb_patch",
       label: "Herb Patch",
-      position: { x: 720, y: 1950 },
+      position: { x: 575, y: 1965 },
       scale: 0.154,
       shadowW: 130,
       damagedAsset: "hedgehog_herb_patch_damaged",
@@ -187,23 +187,23 @@ export const SQUIRREL_HABITAT: HabitatDef = {
   animalId: "squirrel",
   name: "Squirrel's Acorn Woodland Grove",
   region: "treeGrove",
-  homePosition: { x: 2380, y: 1420 },
+  homePosition: { x: 2440, y: 1645 },
   resources: [
     {
       id: "squirrel_acorn_oak",
       label: "Acorn Oak",
-      position: { x: 2190, y: 1340 },
+      position: { x: 2260, y: 1580 },
       scale: 0.192,
       shadowW: 170,
-      damagedAsset: "squirrel_acorn_oak_damaged",
-      restoredAsset: "squirrel_acorn_oak_restored",
+      damagedAsset: "squirrel_acorn_tree_damaged",
+      restoredAsset: "squirrel_acorn_tree_restored",
       produces: "acorn",
       restoreCost: 5,
     },
     {
       id: "squirrel_nut_cache",
       label: "Nut Cache",
-      position: { x: 2570, y: 1510 },
+      position: { x: 2610, y: 1600 },
       scale: 0.144,
       shadowW: 120,
       damagedAsset: "squirrel_nut_cache_damaged",
@@ -214,7 +214,7 @@ export const SQUIRREL_HABITAT: HabitatDef = {
     {
       id: "squirrel_apple_tree",
       label: "Apple Tree",
-      position: { x: 2170, y: 1580 },
+      position: { x: 2440, y: 1880 },
       scale: 0.182,
       shadowW: 160,
       damagedAsset: "squirrel_apple_tree_damaged",
@@ -230,12 +230,12 @@ export const FOX_HABITAT: HabitatDef = {
   animalId: "fox",
   name: "Fox's Fern & Berry Woodland",
   region: "treeGrove",
-  homePosition: { x: 2820, y: 1620 },
+  homePosition: { x: 2915, y: 1750 },
   resources: [
     {
       id: "fox_berry_vine",
       label: "Berry Vine",
-      position: { x: 3020, y: 1540 },
+      position: { x: 3060, y: 1610 },
       scale: 0.173,
       shadowW: 140,
       damagedAsset: "fox_berry_vine_damaged",
@@ -246,7 +246,7 @@ export const FOX_HABITAT: HabitatDef = {
     {
       id: "fox_fern_cluster",
       label: "Fern Cluster",
-      position: { x: 2600, y: 1740 },
+      position: { x: 2760, y: 1760 },
       scale: 0.163,
       shadowW: 130,
       damagedAsset: "fox_fern_cluster_damaged",
@@ -257,7 +257,7 @@ export const FOX_HABITAT: HabitatDef = {
     {
       id: "fox_grape_vine",
       label: "Grape Vine",
-      position: { x: 2900, y: 1740 },
+      position: { x: 2960, y: 1900 },
       scale: 0.144,
       shadowW: 110,
       damagedAsset: "fox_grape_vine_damaged",
@@ -273,12 +273,12 @@ export const DEER_HABITAT: HabitatDef = {
   animalId: "deer",
   name: "Deer's Enchanted Clearing",
   region: "farmCorner",
-  homePosition: { x: 2680, y: 1020 },
+  homePosition: { x: 2720, y: 2215 },
   resources: [
     {
       id: "deer_moonflower_meadow",
       label: "Moonflower Meadow",
-      position: { x: 2470, y: 960 },
+      position: { x: 2500, y: 2160 },
       scale: 0.192,
       shadowW: 160,
       damagedAsset: "deer_moonflower_meadow_damaged",
@@ -289,7 +289,7 @@ export const DEER_HABITAT: HabitatDef = {
     {
       id: "deer_enchanted_berry_shrine",
       label: "Enchanted Berry Shrine",
-      position: { x: 2870, y: 820 },
+      position: { x: 2950, y: 2120 },
       scale: 0.173,
       shadowW: 150,
       damagedAsset: "deer_enchanted_berry_shrine_damaged",
@@ -300,7 +300,7 @@ export const DEER_HABITAT: HabitatDef = {
     {
       id: "deer_enchanted_mushroom_ring",
       label: "Enchanted Mushroom Ring",
-      position: { x: 2660, y: 1210 },
+      position: { x: 2720, y: 2370 },
       scale: 0.154,
       shadowW: 130,
       damagedAsset: "deer_enchanted_mushroom_ring_damaged",

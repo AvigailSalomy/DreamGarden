@@ -20,7 +20,7 @@ export const RABBIT: GardenObjectDef = {
   tier: "common",
 
   garden_sprite: "dg_rabbit",
-  garden_position: { x: 900, y: 1500 },
+  garden_position: { x: 922, y: 1545 },
   // production PNG is native ~671x1100 — scale
   // down to roughly the same on-screen footprint the garden layout was tuned for.
   garden_scale: 0.10,
@@ -36,7 +36,7 @@ export const RABBIT: GardenObjectDef = {
 
   reveal_animation: "hop_in",
   idle_behavior: "rabbit_hop",
-  movement_bounds: { shape: "rect", x: 900, y: 1500, w: 60, h: 34 },
+  movement_bounds: { shape: "rect", x: 922, y: 1545, w: 40, h: 34 },
   complete_sfx: "rabbitChirp",
 
   letter: {
@@ -174,7 +174,7 @@ export const HEDGEHOG: GardenObjectDef = {
   tier: "common",
 
   garden_sprite: "dg_hedgehog",
-  garden_position: { x: 560, y: 2080 },
+  garden_position: { x: 572, y: 2110 },
   garden_scale: 0.075,
   region: "animalMeadow",
   layer: "actors",
@@ -188,7 +188,7 @@ export const HEDGEHOG: GardenObjectDef = {
 
   reveal_animation: "scale_bloom",
   idle_behavior: "rabbit_hop",
-  movement_bounds: { shape: "rect", x: 560, y: 2080, w: 60, h: 34 },
+  movement_bounds: { shape: "rect", x: 572, y: 2110, w: 60, h: 34 },
   complete_sfx: "bloomChime",
 
   letter: {
@@ -255,7 +255,7 @@ export const SQUIRREL: GardenObjectDef = {
   tier: "common",
 
   garden_sprite: "dg_squirrel",
-  garden_position: { x: 2380, y: 1420 },
+  garden_position: { x: 2440, y: 1645 },
   garden_scale: 0.09,
   region: "treeGrove",
   layer: "actors",
@@ -269,7 +269,7 @@ export const SQUIRREL: GardenObjectDef = {
 
   reveal_animation: "scale_bloom",
   idle_behavior: "rabbit_hop",
-  movement_bounds: { shape: "rect", x: 2380, y: 1420, w: 60, h: 34 },
+  movement_bounds: { shape: "rect", x: 2440, y: 1645, w: 60, h: 34 },
   complete_sfx: "bloomChime",
 
   letter: {
@@ -334,7 +334,7 @@ export const FOX: GardenObjectDef = {
   tier: "common",
 
   garden_sprite: "dg_fox",
-  garden_position: { x: 2820, y: 1620 },
+  garden_position: { x: 2915, y: 1750 },
   garden_scale: 0.115,
   region: "treeGrove",
   layer: "actors",
@@ -348,7 +348,7 @@ export const FOX: GardenObjectDef = {
 
   reveal_animation: "scale_bloom",
   idle_behavior: "rabbit_hop",
-  movement_bounds: { shape: "rect", x: 2820, y: 1620, w: 60, h: 34 },
+  movement_bounds: { shape: "rect", x: 2915, y: 1750, w: 60, h: 34 },
   complete_sfx: "bloomChime",
 
   letter: {
@@ -413,7 +413,8 @@ export const DEER: GardenObjectDef = {
   tier: "special",
 
   garden_sprite: "dg_deer",
-  garden_position: { x: 2680, y: 1020 },
+  sprite_facing: "left", // the deer art faces left (all other animals face right)
+  garden_position: { x: 2720, y: 2215 },
   garden_scale: 0.16,
   region: "farmCorner",
   layer: "actors",
@@ -427,7 +428,7 @@ export const DEER: GardenObjectDef = {
 
   reveal_animation: "scale_bloom",
   idle_behavior: "rabbit_hop",
-  movement_bounds: { shape: "rect", x: 2680, y: 1020, w: 60, h: 34 },
+  movement_bounds: { shape: "rect", x: 2720, y: 2215, w: 60, h: 34 },
   complete_sfx: "bloomChime",
 
   letter: {

@@ -29,6 +29,7 @@ export interface GameEvents {
   "minigame:completed": { objectId: string; level: number; coinsEarned: number };
   "shop:open": Record<string, never>;
   "shop:closed": Record<string, never>;
+  "hints:changed": { total: number };
   /** ShopScene closes itself and hands off to GardenScene's world placement mode. */
   "decor:placeStart": { itemId: string };
   "decor:placed": { placementId: string; itemId: string; x: number; y: number };

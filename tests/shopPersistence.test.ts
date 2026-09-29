@@ -53,3 +53,42 @@ describe("Shop regression: shared currency and persistent personalization", () =
     expect(shop.buyAccessory("garden_hat").ok).toBe(false);expect(economy.coins).toBe(0);
   });
 });
+
+describe("Puzzle Hints: purchasable, persistent consumable", () => {
+  it("buys at the hint price, stacks, and survives reload", () => {
+    const { economy, shop } = stack(); economy.add(200, "test fixture");
+    const start = economy.coins;
+    for (let i = 0; i < 3; i++) expect(shop.buyHint().ok).toBe(true);
+    expect(shop.hintsOwned).toBe(3);
+    expect(economy.coins).toBe(start - 3 * shop.hintCost);
+    const next = stack();
+    expect(next.shop.hintsOwned).toBe(3);
+    expect(next.economy.coins).toBe(start - 3 * shop.hintCost);
+  });
+
+  it("refuses to buy without enough coins (no charge, no hint)", () => {
+    const { economy, shop } = stack();
+    economy.spend(economy.coins, "drain for test");
+    expect(shop.buyHint()).toEqual({ ok: false, reason: "cannot afford" });
+    expect(shop.hintsOwned).toBe(0);
+    expect(economy.coins).toBe(0);
+  });
+
+  it("uses exactly one at a time, never goes negative, and persists the new count", () => {
+    const { economy, shop } = stack(); economy.add(200, "test fixture");
+    shop.buyHint(); shop.buyHint();
+    expect(shop.useHint()).toBe(true);
+    expect(shop.hintsOwned).toBe(1);
+    expect(stack().shop.hintsOwned).toBe(1);
+    expect(shop.useHint()).toBe(true);
+    expect(shop.useHint()).toBe(false);
+    expect(shop.hintsOwned).toBe(0);
+  });
+
+  it("older saves without a hint inventory load with 0 hints (and bad values are sanitised)", () => {
+    localStorage.setItem(key, JSON.stringify({ coins: 99, shop: { unlocked: true } }));
+    expect(stack().shop.hintsOwned).toBe(0);
+    localStorage.setItem(key, JSON.stringify({ coins: 99, shop: { hintsOwned: -4 } }));
+    expect(stack().shop.hintsOwned).toBe(0);
+  });
+});

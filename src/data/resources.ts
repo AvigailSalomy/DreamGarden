@@ -21,7 +21,7 @@ export const RESOURCES: Record<string, ResourceDef> = {
   water_lily: { id: "water_lily", label: "Water Lily", icon: "dg_bird_water_lily_patch_restored" },
   moss: { id: "moss", label: "Moss", icon: "dg_hedgehog_mossy_log_restored" },
   mushroom: { id: "mushroom", label: "Mushroom", icon: "dg_hedgehog_mushroom_log_restored" },
-  acorn: { id: "acorn", label: "Acorn", icon: "dg_squirrel_acorn_oak_restored" },
+  acorn: { id: "acorn", label: "Acorn", icon: "dg_squirrel_acorn_tree_restored" },
   nut: { id: "nut", label: "Nut", icon: "dg_squirrel_nut_cache_restored" },
   apple: { id: "apple", label: "Apple", icon: "dg_squirrel_apple_tree_restored" },
   fern: { id: "fern", label: "Fern", icon: "dg_fox_fern_cluster_restored" },

@@ -4,7 +4,7 @@ import { makePanel } from "../ui/Panel";
 import { Button } from "../ui/Button";
 import { bus } from "../game/services";
 import { RESOURCES } from "../data/resources";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 export interface MazeIntroInit {
   objectId: string;
@@ -101,7 +101,7 @@ export class MazeIntroScene extends Phaser.Scene {
   private play(): void {
     if (this.closing) return;
     this.closing = true;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     this.scene.launch("GardenMaze", this.mi);
     this.scene.stop();
   }
@@ -109,7 +109,7 @@ export class MazeIntroScene extends Phaser.Scene {
   private close(): void {
     if (this.closing) return;
     this.closing = true;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     bus.emit("habitatRequest:open", { objectId: this.mi.objectId });
     this.scene.stop();
   }

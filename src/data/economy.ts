@@ -5,4 +5,6 @@ export const MAZE_ECONOMY = {
   hard: { count: 24, value: 2 },   // 48 coins available
 } as const;
 export const MAZE_LEAF_SUCCESS_VALUE = 1;
-export const SHOP_ECONOMY = { basicMinimum: 150, mysteryGift: 500 } as const;
+/** puzzleHint: a consumable — about one medium maze run of coins (36) plus
+ *  leaves, and well under the cheapest permanent decor (basicMinimum). */
+export const SHOP_ECONOMY = { basicMinimum: 150, mysteryGift: 500, puzzleHint: 40 } as const;

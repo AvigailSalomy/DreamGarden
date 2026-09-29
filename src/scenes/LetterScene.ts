@@ -6,6 +6,7 @@ import { safeInsets } from "../util/safeArea";
 import { bus, progression, save } from "../game/services";
 import { Sfx } from "../fx/Sfx";
 import { sparkleBurst } from "../fx/Particles";
+import { audio } from "../audio/AudioManager";
 
 interface LetterInit {
   objectId: string;
@@ -157,7 +158,7 @@ export class LetterScene extends Phaser.Scene {
   private open(): void {
     if (this.opened || this.done) return;
     this.opened = true;
-    Sfx.unlock();
+    audio.unlock();
     Sfx.sparkle();
 
     const W = this.scale.width;
@@ -235,7 +236,7 @@ export class LetterScene extends Phaser.Scene {
   private finish(): void {
     if (this.done) return;
     this.done = true;
-    Sfx.tap();
+    audio.playSfx("ui_click");
     save.state.lettersSeen[this.objectId] = true;
     save.saveNow();
 

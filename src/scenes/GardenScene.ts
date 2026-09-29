@@ -20,6 +20,7 @@ import type { RestorationResource } from "../data/habitats";
 import { RESOURCES } from "../data/resources";
 import { calculateAccessoryTransform, accessoryIconFor, accessoryItem, decorItem } from "../data/shop";
 import type { UIScene } from "./UIScene";
+import { audio } from "../audio/AudioManager";
 
 /** Region rectangles (centre x/y + w/h) laid across the expanded world. */
 const REGIONS: Record<string, RegionRect> = {
@@ -35,22 +36,33 @@ const REGIONS: Record<string, RegionRect> = {
 const BLOOMABLE = new Set(["animalMeadow", "cottageYard", "flowerBed"]);
 const WILDFLOWER_TINTS = [0xf3a9cf, 0xf5c24b, 0xb98be0];
 
+/** How far the purely-decorative scenery extends past the playable garden,
+ *  so a wide zoomed-out view never shows the canvas behind the world. */
+const EDGE_MARGIN_X = 1650;
+const EDGE_MARGIN_Y = 1100;
+
 /** Roughly the middle of all the playable garden — the wide opening frames on this. */
 const GARDEN_CENTER = { x: 1500, y: 1520 };
 
 /**
- * The one-time opening tour: begins on a WIDE view of the whole neglected garden,
- * then moves between the broken landmarks, and finally settles at the rabbit meadow.
+ * New Game only: a short cinematic sweep over every animal's DAMAGED habitat
+ * (derived from data/habitats.ts, so it follows the real layout), ending on
+ * the first animal's meadow. ~7–8s total: wide hold, then 5 eased pans.
  */
-const TOUR: Array<{ x: number; y: number; zoom: number | "wide"; hold: number }> = [
-  { x: GARDEN_CENTER.x, y: GARDEN_CENTER.y, zoom: "wide", hold: 1400 }, // whole garden
-  { x: 1560, y: 940, zoom: 0.95, hold: 520 }, // garden clearing
-  { x: 2500, y: 1240, zoom: 0.9, hold: 520 }, // dead Great Oak
-  { x: 1540, y: 1960, zoom: 0.9, hold: 520 }, // pondside clearing
-  { x: 470, y: 1600, zoom: 0.95, hold: 520 }, // collapsed Wildflowers
-  { x: 1760, y: 1150, zoom: 1.0, hold: 520 }, // empty Songbird perch
-  { x: START_FOCUS.x, y: START_FOCUS.y, zoom: 1.0, hold: 300 }, // Rabbit meadow
-];
+const TOUR_ORDER = ["deer", "fox", "squirrel", "bird", "hedgehog"];
+const TOUR_PAN_MS = 950;
+const TOUR_HOLD_MS = 380;
+
+/** Visual centre of a habitat: its animal plus its three resource sources. */
+function habitatCentre(animalId: string): { x: number; y: number } | null {
+  const h = habitatFor(animalId);
+  if (!h) return null;
+  const pts = [h.homePosition, ...h.resources.map((r) => r.position)];
+  return {
+    x: pts.reduce((a, p) => a + p.x, 0) / pts.length,
+    y: pts.reduce((a, p) => a + p.y, 0) / pts.length - 50,
+  };
+}
 
 const wait = (scene: Phaser.Scene, ms: number) =>
   new Promise<void>((res) => scene.time.delayedCall(ms, res));
@@ -121,6 +133,9 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.events.on(Phaser.Scenes.Events.RESUME, () => this.flushWorldEffects());
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.teardown());
 
+    // the looping theme lives in AudioManager, outside every scene — this is
+    // idempotent, so re-entering the Garden never restarts or doubles it
+    audio.startMusic();
     this.time.delayedCall(80, () => this.beginEntryFlow());
 
     if (import.meta.env.DEV) {
@@ -185,6 +200,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
 
   update(): void {
     for (const v of this.views.values()) v.setDepthFromY();
+    this.layoutScreen();
   }
 
   private onResize(): void {
@@ -192,13 +208,29 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.camera?.onResize();
   }
 
+  /** Screen-space overlays (sky, vignette) use scrollFactor 0, but Phaser
+   *  still scales them by camera zoom around the viewport centre — so at any
+   *  zoom other than 1 the vignette's dark rim shrank into a visible
+   *  rectangle over the world. Counter-scale by zoom, centred, every frame
+   *  (zoom changes continuously while pinching/tweening). */
   private layoutScreen(): void {
     const w = this.scale.width;
     const h = this.scale.height;
-    for (const o of this.screenObjects) o.setDisplaySize(w, h);
+    const zoom = this.cameras.main.zoom || 1;
+    for (const o of this.screenObjects) {
+      o.setOrigin(0.5, 0.5).setPosition(w / 2, h / 2).setDisplaySize(w / zoom, h / zoom);
+    }
   }
 
   /* ---------------- entry flow ---------------- */
+
+  /** Where a returning session should land: the habitat of the animal the
+   *  saved progression says is currently active (first not-yet-rescued in
+   *  unlock order). Once every animal is home, the whole-garden centre. */
+  private continueFocus(): { x: number; y: number } {
+    const active = progression.activeAnimalId();
+    return (active && habitatCentre(active)) || GARDEN_CENTER;
+  }
 
   private beginEntryFlow(): void {
     const task = progression.currentTask;
@@ -238,8 +270,11 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.ui.setRevealing(true);
     this.ui.setHudVisible(false);
 
-    await wait(this, 1200); // "wow — this whole place is damaged" (spec: ~1.0–1.5s)
-    await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, 1600, 1); // "...let's start fixing it" (~1.2–1.8s)
+    // Continue resumes where the player actually is — the active animal's
+    // habitat from the save — not the hardcoded first-animal meadow.
+    await wait(this, 400);
+    const focus = this.continueFocus();
+    await this.camera.focusOn(focus.x, focus.y, 1100, 1);
 
     this.ui.setHudVisible(true);
   }
@@ -253,6 +288,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     });
 
     await this.playTour();
+    if (!this.tourSkipped) await this.ui.showCaption("Bring the garden back to life!", 1500);
     // After the whole-garden establishing pan, focus specifically on the
     // first animal's habitat and its three damaged sources — the player's
     // very first close look at the garden should be "here is what's broken
@@ -276,14 +312,18 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   }
 
   private async playTour(): Promise<void> {
-    for (const stop of TOUR) {
+    // create() already framed the whole garden wide — hold it for a beat
+    await wait(this, this.tourSkipped ? 0 : 900);
+    for (const id of TOUR_ORDER) {
       if (this.tourSkipped) break;
-      const z = stop.zoom === "wide" ? this.camera.minZoomValue : stop.zoom;
-      await this.camera.focusOn(stop.x, stop.y, 760, z);
-      await wait(this, stop.hold);
+      const c = habitatCentre(id);
+      if (!c) continue;
+      await this.camera.focusOn(c.x, c.y, TOUR_PAN_MS, 0.85);
+      await wait(this, TOUR_HOLD_MS);
     }
-    // always settle on the meadow at a comfortable inspect zoom
-    await this.camera.focusOn(START_FOCUS.x, START_FOCUS.y, this.tourSkipped ? 500 : 760, 1);
+    // always settle on the first animal's meadow at a comfortable inspect zoom
+    const first = habitatCentre(progression.animalOrder()[0]?.id ?? "") ?? START_FOCUS;
+    await this.camera.focusOn(first.x, first.y, this.tourSkipped ? 500 : TOUR_PAN_MS, 1);
   }
 
   /**
@@ -394,6 +434,8 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     const nextAnimalId = progression.activeAnimalId();
     if (nextAnimalId) {
       this.activateAnimalSilhouette(nextAnimalId);
+      audio.playSfx("animal_discovery");
+      this.ui.refreshHabitatBar(); // HUD bar switches to the newly active animal
       await this.introduceHabitat(nextAnimalId);
       this.camera.enable();
       this.ui.setRevealing(false);
@@ -403,6 +445,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     }
 
     // garden complete — a slow look around, then stop (no further gameplay)
+    this.ui.refreshHabitatBar(); // no active animal left — the bar hides
     await this.camera.focusOn(1500, 1560, 1500, 0.9);
     await wait(this, 300);
     this.camera.enable();
@@ -419,7 +462,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       "Skip ›",
       20,
       () => {
-        Sfx.tap();
+        audio.playSfx("ui_click");
         onSkip();
       },
       { color: "#fef6e8", hitW: 112, hitH: 54 },
@@ -444,14 +487,20 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.add.image(1400, 90, "clouds").setOrigin(0, 0).setScrollFactor(0.16).setDepth(-900).setScale(0.85).setAlpha(0.65);
     this.add.image(2400, 220, "clouds").setOrigin(0, 0).setScrollFactor(0.13).setDepth(-900).setScale(0.7).setAlpha(0.6);
 
-    this.add.image(-160, HORIZON + 70, "hills_far").setOrigin(0, 1).setScrollFactor(0.32).setDepth(-820).setScale(1.5);
-    this.add.image(-220, HORIZON + 110, "hills_near").setOrigin(0, 1).setScrollFactor(0.5).setDepth(-780).setScale(1.5);
+    // Distant hills: fixed in the world (they used to be parallax layers,
+    // which at wide zoom drifted apart into flat bands with straight edges),
+    // tiled past both garden edges, hazed toward the sky colour. They sit
+    // BEHIND the grass, so their irregular crests form the skyline.
+    for (const x of [-EDGE_MARGIN_X, -EDGE_MARGIN_X + 3600, -EDGE_MARGIN_X + 7200]) {
+      this.add.image(x, HORIZON + 170, "hills_far").setOrigin(0, 1).setScale(1.5).setDepth(-830).setAlpha(0.9);
+      this.add.image(x - 300, HORIZON + 230, "hills_near").setOrigin(0, 1).setScale(1.5).setDepth(-800);
+    }
   }
 
   private buildGround(): void {
     const g = this.add.graphics().setDepth(-200);
     g.fillStyle(COLORS.grassDull, 1);
-    g.fillRect(0, HORIZON - 4, WORLD_WIDTH, WORLD_HEIGHT - HORIZON + 4);
+    g.fillRect(-EDGE_MARGIN_X, HORIZON - 4, WORLD_WIDTH + EDGE_MARGIN_X * 2, WORLD_HEIGHT - HORIZON + 4 + EDGE_MARGIN_Y);
 
     // The supplied painted ground reference as the actual terrain, not a flat
     // fill or a re-drawn SVG. It doesn't tile perfectly seamlessly on its own
@@ -461,13 +510,19 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // — and every seam additionally falls under a prop cluster from buildProps().
     const tileW = 1650;
     const tileH = 1100;
-    for (let row = 0; row * tileH < WORLD_HEIGHT - HORIZON + tileH; row++) {
-      for (let col = 0; col * tileW < WORLD_WIDTH; col++) {
+    // The same mirrored tiling continues PAST the playable garden (one extra
+    // column each side, extra rows below) purely as scenery, so a wide
+    // zoomed-out view never exposes canvas. The in-garden tiles keep exactly
+    // their old positions and flips (parity is computed from the same col/row).
+    const firstCol = -Math.ceil(EDGE_MARGIN_X / tileW);
+    const lastCol = Math.ceil((WORLD_WIDTH + EDGE_MARGIN_X) / tileW) - 1;
+    for (let row = 0; row * tileH < WORLD_HEIGHT - HORIZON + EDGE_MARGIN_Y; row++) {
+      for (let col = firstCol; col <= lastCol; col++) {
         this.add
           .image(col * tileW, HORIZON + row * tileH, "dg_grass_ground")
           .setOrigin(0, 0)
           .setDisplaySize(tileW, tileH)
-          .setFlipX(col % 2 === 1)
+          .setFlipX(((col % 2) + 2) % 2 === 1)
           .setFlipY(row % 2 === 1)
           .setDepth(-195);
       }
@@ -481,8 +536,16 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // shape of a "large rectangular overlay" if it ever rendered as a flat
     // fill instead of a fade. Baked into a texture instead — renders
     // identically on both renderer paths.
-    this.bakeHorizonBlend();
-    this.add.image(0, HORIZON - 110, "dg_horizon_blend").setOrigin(0, 0).setDisplaySize(WORLD_WIDTH, 150).setDepth(-185);
+    // Soft atmospheric transition at the top of the grass: a tall haze that
+    // melts the painted ground's straight top edge into the distant hills
+    // (was a 150px fill-coloured fade that left a hard line across the top).
+    this.bakeHorizonHaze();
+    this.add
+      .image(-EDGE_MARGIN_X, HORIZON - 140, "dg_horizon_haze")
+      .setOrigin(0, 0)
+      .setDisplaySize(WORLD_WIDTH + EDGE_MARGIN_X * 2, 420)
+      .setDepth(-185);
+    this.buildWorldSurround();
     // NOTE: a single huge "path" instance used to sit here (scale 1.6, alpha
     // 0.95, spanning nearly the whole world height) — at that scale its soft
     // organic curve was imperceptible and it read as a big flat translucent
@@ -491,21 +554,60 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     // low-alpha path segments that actually read as a worn trail.
   }
 
-  /** Bakes the horizon-fade gradient into a small canvas texture once (see the
-   *  note at its call site for why — `Graphics.fillGradientStyle` is WebGL-only). */
-  private bakeHorizonBlend(): void {
-    const key = "dg_horizon_blend";
+  /** Vertical haze: transparent above, soft hill-green haze over the grass's
+   *  top edge, fading back to transparent into the painted grass. */
+  private bakeHorizonHaze(): void {
+    const key = "dg_horizon_haze";
     if (this.textures.exists(key)) return;
-    const tex = this.textures.createCanvas(key, 4, 150);
-    const ctx = tex!.getContext();
-    const hex = `#${COLORS.grassDull.toString(16).padStart(6, "0")}`;
-    const grad = ctx.createLinearGradient(0, 0, 0, 150);
-    grad.addColorStop(0, hex + "00");
-    grad.addColorStop(1, hex + "ff");
+    const tex = this.textures.createCanvas(key, 4, 420)!;
+    const ctx = tex.getContext();
+    const grad = ctx.createLinearGradient(0, 0, 0, 420);
+    grad.addColorStop(0, "rgba(170,205,150,0)");
+    grad.addColorStop(0.2, "rgba(165,203,146,0.75)");
+    grad.addColorStop(0.36, "rgba(160,198,138,0.95)");
+    grad.addColorStop(0.62, "rgba(156,191,122,0.55)");
+    grad.addColorStop(1, "rgba(156,191,122,0)");
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 4, 150);
-    tex!.refresh();
+    ctx.fillRect(0, 0, 4, 420);
+    tex.refresh();
   }
+
+  /**
+   * Scenery OUTSIDE the playable garden (never interactive, no gameplay
+   * coordinates): a hazy distant tree line along the horizon, and soft trees /
+   * bushes just past the left, right and bottom edges — so a wide zoom-out
+   * reads garden → vegetation → distant landscape instead of a hard cutoff.
+   */
+  private buildWorldSurround(): void {
+    const haze = 0xc7d6c0;
+    const kinds = ["tree_far", "tree", "tree_pink", "tree_tall"];
+    // distant tree line on the horizon, across the full extended width
+    for (let i = 0, x = -EDGE_MARGIN_X + 60; x < WORLD_WIDTH + EDGE_MARGIN_X; i++, x += 190 + ((i * 97) % 140)) {
+      this.treeOfKind(kinds[i % kinds.length], x, HORIZON + 40 + ((i * 53) % 50), 0.45 + ((i * 31) % 20) / 100, {
+        depth: -186,
+        tint: haze,
+        alpha: 0.85,
+      });
+    }
+    // edge vegetation just outside the garden (y-sorted like any prop, but
+    // only ever placed where nothing playable exists)
+    const bush = (x: number, y: number, s: number) =>
+      this.add.image(x, y, "dg_bush_mixed_01").setOrigin(0.5, 1).setScale(s).setDepth(y).setTint(0xdfe8d6);
+    for (let y = 900; y < WORLD_HEIGHT + 500; y += 260) {
+      const k = (y / 260) | 0;
+      this.treeOfKind(kinds[k % kinds.length], -170 - (k % 3) * 60, y, 0.9, { depth: y, tint: 0xd8e2d0 });
+      this.treeOfKind(kinds[(k + 2) % kinds.length], WORLD_WIDTH + 170 + (k % 3) * 60, y + 120, 0.9, { depth: y + 120, tint: 0xd8e2d0 });
+      bush(-60, y + 150, 0.22);
+      bush(WORLD_WIDTH + 60, y + 40, 0.22);
+    }
+    for (let x = 80; x < WORLD_WIDTH; x += 330) {
+      const k = (x / 330) | 0;
+      this.treeOfKind(kinds[k % kinds.length], x + (k % 2) * 120, WORLD_HEIGHT + 260 + (k % 3) * 40, 0.85, { depth: WORLD_HEIGHT + 260, tint: 0xd8e2d0 });
+      bush(x + 170, WORLD_HEIGHT + 150, 0.2);
+    }
+  }
+
+
 
   private prop(key: string, x: number, y: number, scale = 1, shadowW = 0): Phaser.GameObjects.Image {
     if (shadowW > 0) {
@@ -660,11 +762,13 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.dprop("decor/bench_01", 2110, 1420, 0.2, 140);
 
     // ---- animal meadow: Rabbit's clearing + Hedgehog's nook ----
-    // one damage cue (the dead shrub), generous open ground between the two
-    // small animals' own areas. Each resource-source image already carries
-    // its own grounding (grass edge, rocks, dirt baked into the art), so this
-    // only needs a LIGHT supporting touch, not a second layer of clutter.
-    this.prop("dead_shrub", 640, 1420, 1.0, 150);
+    // generous open ground between the two small animals' own areas. Each
+    // resource-source image already carries its own grounding (grass edge,
+    // rocks, dirt baked into the art), so this only needs a LIGHT supporting
+    // touch, not a second layer of clutter. (A flat bare-twig SVG used to sit
+    // here as a damage cue; it read as unfinished next to the production art,
+    // so a small production flower clump takes its place.)
+    this.dprop("vegetation/flowers_mixed_01", 640, 1420, 0.12);
     this.dprop("vegetation/bush_mixed_01", 1220, 1500, 0.19);
     this.dprop("decor/sign_01", 200, 1520, 0.16); // marks the meadow/flowerbed path junction
     // Hedgehog's Wild Herb & Mushroom Nook — its 3 resources are built by
@@ -678,23 +782,35 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.dprop("nature/rock_small_01", 690, 1660, 0.16, 120);
 
     // ---- magic tree grove: Squirrel's grove + Fox's woodland ----
-    // the dead oak stays as the grove's own future-restoration landmark;
     // Squirrel's and Fox's 3 resources each are built by buildHabitatResources()
-    // below (see data/habitats.ts SQUIRREL_HABITAT / FOX_HABITAT)
-    this.prop("oak_dead", 2350, 1740, 0.55, 100);
-    this.prop("sapling", 2340, 1630, 0.45, 40);
+    // below (see data/habitats.ts SQUIRREL_HABITAT / FOX_HABITAT). The old flat
+    // bare-oak/sapling SVGs that stood here read as unfinished next to the
+    // production art; a lush lantern blossom tree from the same pack now frames
+    // the grove's lower-left edge instead, beside Hazel's apple tree.
+    this.dprop("vegetation/vegetation_03", 2200, 1900, 0.25, 170);
     this.dprop("decor/sign_01", 2140, 1400, 0.16); // marks the cottage/grove path junction
-    this.dprop("vegetation/hedge_straight_01", 2600, 1740, 0.24);
+    // Fox's grape vine (FOX_HABITAT, anchor 2960,1900) grows out of a small
+    // soft-edged soil patch instead of its bare lower branches sitting on grass.
+    // Ground decal: above the lawn, below every prop (same layer as path tufts).
+    this.add.image(2960, 1892, "dg_soil_patch_01").setOrigin(0.5, 0.5).setScale(0.42).setDepth(-100);
+    // grove / clearing boundary — moved off Fox's fern cluster, which it used to
+    // sit exactly on top of
+    this.dprop("vegetation/hedge_straight_01", 2200, 2150, 0.24);
 
-    // ---- Deer's Enchanted Clearing (was the empty "locked/future" corner) ----
+    // ---- Deer's Enchanted Clearing ----
     // Deer's 3 resources are built by buildHabitatResources() below (see
-    // data/habitats.ts DEER_HABITAT)
+    // data/habitats.ts DEER_HABITAT). The clearing now sits in the open
+    // south-east meadow — its old spot around (2680,1000) became the Shop's
+    // clearing, which left the deer standing on the Shop's porch.
     this.dprop("decor/sign_01", 2440, 1140, 0.16); // marks the grove/clearing path junction
 
     // ---- pondside clearing — ordinary scenery only. (A damaged/restored
     // fountain landmark used to anchor this clearing; it was removed — see
     // the Part-4 pass — for implying a seventh restoration objective the
     // player could never act on. This decoration is not tied to any quest.)
+    // A purely decorative stone well (always intact, not interactive) fills
+    // the fountain's old spot at the end of the meadow's south path spur.
+    this.dprop("vegetation/vegetation_05", 1600, 1720, 0.28, 220);
     this.dprop("nature/rock_medium_01", 1120, 1900, 0.18, 140);
     this.dprop("vegetation/bush_mixed_01", 1960, 1880, 0.19);
     this.dprop("decor/sign_01", 1060, 1800, 0.16); // marks the meadow/pond path junction
@@ -854,7 +970,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       if (now - last < 1500) return;
       this.lastCollectedAt.set(res.id, now);
       const total = requests.collectResource(res.produces, 1);
-      Sfx.coin();
+      audio.playSfx("resource_collect");
       sparkleBurst(this, img.x, img.y - img.displayHeight * 0.6, 8, 30);
       this.toast(`+1 ${RESOURCES[res.produces]?.label ?? res.produces} (${total})`);
       this.tweens.add({ targets: img, scaleX: img.scaleX * 1.08, scaleY: img.scaleY * 1.08, duration: 120, yoyo: true });
@@ -865,6 +981,33 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
    *  the instant its funding request completes (see wireEvents' request:purchased
    *  handler), so the habitat visibly improves during the SAME session, not
    *  only after a reload. */
+  private pendingRestoreReveal: string | null = null;
+
+  /**
+   * Post-Restore payoff (~1.8s): focus the camera on the source, play the
+   * existing damaged → restored reveal (restoreResourceSource), fill the HUD
+   * segment as the restored sprite grows in, hold briefly, then reopen the
+   * SAME animal's Request screen so the player picks the next item without
+   * tapping the animal again. Never auto-starts the rescue puzzle — after the
+   * third restore the reopened screen offers "Bring X Home".
+   */
+  private async presentRestoreThenReturn(sourceId: string, objectId: string): Promise<void> {
+    const res = sourceById(sourceId);
+    if (!res) {
+      this.camera.enable();
+      return;
+    }
+    this.flowBusy = true;
+    this.camera.disable();
+    await this.camera.focusOn(res.position.x, res.position.y - 60, 450, Math.max(this.camera.zoom, 1));
+    this.restoreResourceSource(sourceId);
+    await wait(this, 420); // restored sprite is mostly grown in (200ms delay + Back ease)
+    this.ui.refreshHabitatBar(true);
+    await wait(this, 750); // hold on the restored resource
+    this.flowBusy = false;
+    bus.emit("habitatRequest:open", { objectId });
+  }
+
   private restoreResourceSource(sourceId: string): void {
     const res = sourceById(sourceId);
     const existing = this.resourceViews.get(sourceId);
@@ -879,8 +1022,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.makeCollectible(img, res);
     this.resourceViews.set(sourceId, img);
     sparkleBurst(this, x, y - res.scale * 300, 18, 60);
-    Sfx.sparkle();
-    this.time.delayedCall(150, () => Sfx.bloomChime());
+    audio.playSfx("resource_restore"); // main restoration sound, in sync with the visible growth
   }
 
   private buildRegions(): void {
@@ -1074,16 +1216,24 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     view.registerGhost(undefined);
     return new Promise((resolve) => {
       this.tweens.add({ targets: view.body, alpha: 1, duration: 450, ease: "Sine.easeOut" });
+      // settle exactly once, even if the tween is stopped/killed instead of
+      // completing — a hung promise here would freeze the whole rescue reveal
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        view.body.setAlpha(1);
+        ghost.destroy();
+        glow?.destroy();
+        resolve();
+      };
       this.tweens.add({
         targets: [ghost, glow].filter(Boolean),
         alpha: 0,
         duration: 450,
         ease: "Sine.easeIn",
-        onComplete: () => {
-          ghost.destroy();
-          glow?.destroy();
-          resolve();
-        },
+        onComplete: finish,
+        onStop: finish,
       });
     });
   }
@@ -1170,7 +1320,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
   }
 
   private handleTap(x: number, y: number): void {
-    Sfx.unlock();
+    audio.unlock();
     const task = progression.currentTask;
     if (task && !progression.isUnlocked(task.id) && !this.reveal.isRunning && !this.flowBusy) {
       const d = Phaser.Math.Distance.Between(x, y, task.garden_position.x, task.garden_position.y);
@@ -1208,7 +1358,12 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         if (progression.isAnimalLocked(objectId)) return;
         this.flowBusy = false;
         this.camera.disable();
+        // HUD must not sit over the puzzle (UIScene is registered after
+        // PuzzleScene): hide the task card + top HUD and draw the puzzle on top
+        this.ui.hideCard();
+        this.ui.setHudVisible(false);
         this.scene.launch("Puzzle", { objectId });
+        this.scene.bringToTop("Puzzle");
         if (this.scene.isActive()) this.scene.pause();
       }),
     );
@@ -1255,7 +1410,13 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       }),
     );
     this.offFns.push(
-      bus.on("habitatRequest:closed", () => {
+      bus.on("habitatRequest:closed", ({ objectId }) => {
+        const pending = this.pendingRestoreReveal;
+        this.pendingRestoreReveal = null;
+        if (pending) {
+          void this.presentRestoreThenReturn(pending, objectId);
+          return;
+        }
         this.camera.enable();
       }),
     );
@@ -1284,11 +1445,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     );
     this.offFns.push(
       bus.on("resourceSource:restored", ({ sourceId }) => {
-        // live-swap the world sprite the instant the player confirms
-        // restoration in the Habitat Request screen (Garden is paused
-        // underneath it, but the swap should already be in place when we
-        // resume so the reveal is visible immediately)
-        this.restoreResourceSource(sourceId);
+        // The save is already committed; the world swap is HELD until the
+        // Request panel closes so the player actually watches it (see
+        // presentRestoreThenReturn), instead of it playing hidden underneath.
+        this.pendingRestoreReveal = sourceId;
       }),
     );
 
@@ -1307,6 +1467,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
 
     this.offFns.push(
       bus.on("puzzle:closed", ({ solved }) => {
+        this.ui.setHudVisible(true);
         this.ui.setRevealing(!!this.pendingUnlockId);
         if (this.pendingUnlockId) {
           const def = progression.def(this.pendingUnlockId);
@@ -1473,7 +1634,7 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
       return;
     }
     this.spawnPlacedDecor(placementId, itemId, x, y);
-    Sfx.tap();
+    audio.playSfx("ui_click");
     sparkleBurst(this, x, y, 12, 40);
     this.placement?.preview.destroy();
     this.placement?.cancelBtn.destroy();

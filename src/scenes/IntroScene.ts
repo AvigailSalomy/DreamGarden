@@ -6,7 +6,7 @@ import { makeIconButton } from "../ui/hit";
 import { buildCozyBackdrop } from "../world/cozyBackdrop";
 import { safeInsets } from "../util/safeArea";
 import { save } from "../game/services";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 const LINES = [
   "This garden has been quiet for a very long time.",
@@ -40,7 +40,7 @@ export class IntroScene extends Phaser.Scene {
       this.enterBtn.setAlpha(1);
       changed = true;
     }
-    if (changed) Sfx.tap();
+    if (changed) audio.playSfx("ui_click");
   }
 
   create(): void {
@@ -131,8 +131,8 @@ export class IntroScene extends Phaser.Scene {
   }
 
   private finish(): void {
-    Sfx.unlock();
-    Sfx.tap();
+    audio.unlock();
+    audio.playSfx("ui_click");
     this.scale.off(Phaser.Scale.Events.RESIZE, this.relayout, this);
     save.state.introSeen = true;
     save.saveNow();

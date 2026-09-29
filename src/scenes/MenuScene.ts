@@ -6,7 +6,7 @@ import { makeIconButton } from "../ui/hit";
 import { buildCozyBackdrop } from "../world/cozyBackdrop";
 import { safeInsets } from "../util/safeArea";
 import { hasProgress, resetGarden, save } from "../game/services";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 /** The opening storybook screen: title, Continue / Start, Settings. */
 export class MenuScene extends Phaser.Scene {
@@ -93,8 +93,8 @@ export class MenuScene extends Phaser.Scene {
       "⚙",
       34,
       () => {
-        Sfx.unlock();
-        Sfx.tap();
+        audio.unlock();
+        audio.playSfx("ui_click");
         settingsModal(this, { onStartNew: () => this.confirmNew() });
       },
       { hitW: 56, hitH: 56 },

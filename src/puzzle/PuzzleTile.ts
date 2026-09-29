@@ -3,6 +3,7 @@ import { COLORS } from "../ui/theme";
 import { MIN_HIT } from "../ui/hit";
 import { Sfx } from "../fx/Sfx";
 import { pathToPoints } from "./jigsaw";
+import { audio } from "../audio/AudioManager";
 
 export interface PuzzleTileOpts {
   /** Baked canvas texture of this jigsaw piece (already clipped to its cut shape). */
@@ -89,7 +90,7 @@ export class PuzzleTile extends Phaser.GameObjects.Container {
   private onDragStart(): void {
     if (this.placed) return;
     this.scene.registry.set("pointerOnUI", true);
-    Sfx.unlock();
+    audio.unlock();
     Sfx.pickup();
     this.scene.children.bringToTop(this);
     this.setDepth(500);
@@ -132,7 +133,7 @@ export class PuzzleTile extends Phaser.GameObjects.Container {
   lockInto(cx: number, cy: number): void {
     this.placed = true;
     this.disableInteractive();
-    Sfx.snap();
+    audio.playSfx("puzzle_action");
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(12);
     this.scene.tweens.add({ targets: this.shadow, alpha: 0, duration: 120 });
     this.scene.tweens.add({

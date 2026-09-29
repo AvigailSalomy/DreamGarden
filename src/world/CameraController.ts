@@ -304,22 +304,36 @@ export class CameraController {
     if (immediate) this.setZoom(z, focalX, focalY);
   }
 
+  /**
+   * Phaser zooms around the viewport CENTRE, so the visible world rect's
+   * top-left is `scroll + (size - size / zoom) / 2`, not `scroll` itself.
+   * cameraMath's pure helpers work in top-left terms; convert at this boundary.
+   * (Treating scroll as the top-left used to fight Phaser's own bounds clamp:
+   * zoomed out, the bottom of the garden was unreachable; zoomed in, a strip
+   * along the left/top edge was.)
+   */
+  private viewOffset(zoom: number): { x: number; y: number } {
+    return { x: (this.cam.width - this.cam.width / zoom) / 2, y: (this.cam.height - this.cam.height / zoom) / 2 };
+  }
+
   private setZoom(z: number, focalX: number, focalY: number): void {
+    const from = this.viewOffset(this.cam.zoom);
     const next = zoomAroundPoint(
       {
         width: this.cam.width,
         height: this.cam.height,
         zoom: this.cam.zoom,
-        scrollX: this.cam.scrollX,
-        scrollY: this.cam.scrollY,
+        scrollX: this.cam.scrollX + from.x,
+        scrollY: this.cam.scrollY + from.y,
       },
       focalX - this.cam.x,
       focalY - this.cam.y,
       z,
     );
+    const to = this.viewOffset(z);
     this.cam.setZoom(z);
-    this.cam.scrollX = next.scrollX;
-    this.cam.scrollY = next.scrollY;
+    this.cam.scrollX = next.scrollX - to.x;
+    this.cam.scrollY = next.scrollY - to.y;
     this.clamp();
   }
 
@@ -341,14 +355,15 @@ export class CameraController {
   };
 
   private clamp(): void {
+    const off = this.viewOffset(this.cam.zoom);
     const c = clampScroll(
-      this.cam.scrollX,
-      this.cam.scrollY,
+      this.cam.scrollX + off.x,
+      this.cam.scrollY + off.y,
       { width: this.cam.width, height: this.cam.height, zoom: this.cam.zoom },
       this.world,
     );
-    this.cam.scrollX = c.x;
-    this.cam.scrollY = c.y;
+    this.cam.scrollX = c.x - off.x;
+    this.cam.scrollY = c.y - off.y;
   }
 
   private destroy(): void {

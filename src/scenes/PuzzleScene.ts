@@ -3,10 +3,12 @@ import { COLORS, bodyStyle, titleStyle } from "../ui/theme";
 import { Button } from "../ui/Button";
 import { PuzzleBoard } from "../puzzle/PuzzleBoard";
 import { safeInsets } from "../util/safeArea";
-import { bus, progression } from "../game/services";
-import { Sfx } from "../fx/Sfx";
+import { bus, progression, shop } from "../game/services";
+import { labelStyle } from "../ui/theme";
+import { makePill } from "../ui/Panel";
 import type { GardenObjectDef } from "../data/types";
 import type { UIScene } from "./UIScene";
+import { audio } from "../audio/AudioManager";
 
 interface PuzzleInit {
   objectId: string;
@@ -109,13 +111,42 @@ export class PuzzleScene extends Phaser.Scene {
       onSolved: () => this.onSolved(def.id, vm.completed, vm.required),
     });
 
-    const hint = new Button(this, W / 2, hintCenterY, {
-      width: 168,
+    // "My Hints: X" + "Use Hint" — purchased hints (Shop), at most ONE per
+    // puzzle. Same row/height the old free Hint button used, so the board and
+    // loose-piece tray layout above it is unchanged.
+    const pillW = 148;
+    const btnW = 150;
+    const rowW = pillW + 10 + btnW;
+    const hintsPill = makePill(this, pillW, hintH - 8).setPosition(W / 2 - rowW / 2 + pillW / 2, hintCenterY);
+    const hintsLabel = this.add.text(0, 0, "", { ...labelStyle(19), color: "#5e3f73" }).setOrigin(0.5);
+    hintsPill.add(hintsLabel);
+    const refreshHints = () => hintsLabel.setText(`My Hints: ${shop.hintsOwned}`);
+    refreshHints();
+    const offHints = bus.on("hints:changed", refreshHints);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, offHints);
+    const hint = new Button(this, W / 2 + rowW / 2 - btnW / 2, hintCenterY, {
+      width: btnW,
       height: hintH,
-      label: "Hint",
+      label: "Use Hint",
       variant: "cream",
-      fontSize: 23,
-      onClick: () => this.board?.hint(),
+      fontSize: 21,
+      onClick: () => {
+        const board = this.board;
+        if (!board) return;
+        if (!board.hintAvailable) {
+          this.flash("You've already used a hint on this puzzle.");
+          return;
+        }
+        if (shop.hintsOwned <= 0) {
+          this.flash("No hints left — get more in the Shop!");
+          return;
+        }
+        // run the existing hint first; only spend a purchased hint if it helped
+        if (board.hint()) {
+          shop.useHint();
+          hint.setEnabled(false).setLabel("Hint used");
+        }
+      },
     });
     this.backBtn = new Button(this, W - inset.right - 62, inset.top + 32, {
       width: 112,
@@ -125,7 +156,7 @@ export class PuzzleScene extends Phaser.Scene {
       fontSize: 18,
       onClick: () => this.onBack(),
     });
-    this.chrome = [hint, this.backBtn];
+    this.chrome = [hintsPill, hint, this.backBtn];
     this.root.add(this.chrome);
 
     this.root.setAlpha(0);
@@ -139,11 +170,23 @@ export class PuzzleScene extends Phaser.Scene {
       w.__dgPuzzleGrid = () => `${grid.cols}x${grid.rows}`;
       w.__dgBoard = () => this.board?.state() ?? null;
       w.__dgTiles = () => this.board?.tilesDebug() ?? null;
+      w.__dgHintAvailable = () => this.board?.hintAvailable ?? null;
     }
   }
 
+  /** Short message at the top of the puzzle screen (the HUD toast sits under
+   *  this scene while a puzzle is up). Above the board — never over pieces. */
+  private flash(text: string): void {
+    audio.playSfx("ui_click");
+    const inset = safeInsets();
+    const t = this.add.container(this.scale.width / 2, inset.top + 92).setDepth(9000).setAlpha(0);
+    const label = this.add.text(0, 0, text, { ...labelStyle(18), align: "center", wordWrap: { width: Math.min(460, this.scale.width - 60) } }).setOrigin(0.5);
+    t.add([makePill(this, Math.min(this.scale.width - 32, label.width + 44), label.height + 22), label]);
+    this.tweens.add({ targets: t, alpha: 1, duration: 200, hold: 1800, yoyo: true, onComplete: () => t.destroy() });
+  }
+
   private onBack(): void {
-    Sfx.tap();
+    audio.playSfx("ui_click");
     if (this.closing) return;
     if (!this.backArmed) {
       this.backArmed = true;

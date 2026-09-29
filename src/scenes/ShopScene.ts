@@ -15,7 +15,10 @@ import {
   type DecorCatalogItem,
 } from "../data/shop";
 import { sparkleBurst } from "../fx/Particles";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
+
+/** Content-space y where the item grid starts, below the Mystery Gift + Puzzle Hint cards. */
+const GRID_TOP = 250;
 
 type Tab = "daily" | "accessories";
 
@@ -125,9 +128,41 @@ export class ShopScene extends Phaser.Scene {
     this.accessoriesBtn.setAlpha(this.tab === "accessories" ? 1 : 0.72);
 
     this.buildMysteryGiftCard();
+    this.buildHintCard();
     if (this.tab === "daily") this.buildDailyGrid();
     else this.buildAccessoriesGrid();
     this.scrollTo(this.scrollOffset);
+  }
+
+  /* ---------------- Puzzle Hint ---------------- */
+
+  /** Consumable: +1 to the saved hint inventory, spent in rescue puzzles
+   *  ("My Hints" / "Use Hint" there). Sits under the Mystery Gift on every tab. */
+  private buildHintCard(): void {
+    const w = this.panelW - 52;
+    const compact = w < 500;
+    const card = this.add.container(0, 65 + 59 + 12 + 52);
+    card.add(makePanel(this, w, 104, { radius: 22, fill: 0xf1e6f6, edge: 0xc9b0dc }));
+    const glow = this.add.image(-w / 2 + 48, 0, "glow").setDisplaySize(96, 96).setTint(0xffe6a3).setAlpha(0.55);
+    const star = this.add.image(-w / 2 + 48, 0, "star_special").setDisplaySize(58, 58);
+    card.add([glow, star]);
+    const textX = compact ? 20 : -w / 2 + 110;
+    card.add(this.add.text(textX, compact ? -28 : -18, "Puzzle Hint", { ...labelStyle(20), color: "#5e3f73" }).setOrigin(compact ? 0.5 : 0, 0.5));
+    const owned = this.add.text(textX, compact ? -4 : 12, `You have: ${shop.hintsOwned}`, { ...labelStyle(15), color: "#70482e" }).setOrigin(compact ? 0.5 : 0, 0.5);
+    card.add(owned);
+    card.add(new Button(this, compact ? 20 : w / 2 - 95, compact ? 30 : 0, {
+      width: 156, height: 42, label: `Buy · ${shop.hintCost}`, fontSize: 17, variant: "gold",
+      onClick: () => {
+        if (!this.canTapCatalog()) return;
+        const res = shop.buyHint();
+        if (!res.ok) { this.toast(res.reason === "cannot afford" ? "Not enough coins yet." : "Couldn't buy that."); return; }
+        audio.playSfx("shop_purchase");
+        owned.setText(`You have: ${shop.hintsOwned}`);
+        this.tweens.add({ targets: owned, scale: { from: 1.2, to: 1 }, duration: 260, ease: "Back.easeOut" });
+        this.toast(`Puzzle Hint added! You have ${shop.hintsOwned}.`);
+      },
+    }));
+    this.content.add(card);
   }
 
   /* ---------------- Mystery Gift ---------------- */
@@ -158,7 +193,7 @@ export class ShopScene extends Phaser.Scene {
       this.toast(result.reason === "cannot afford" ? "Not enough coins yet." : "Something went wrong.");
       return;
     }
-    Sfx.bloomChime();
+    audio.playSfx("shop_purchase");
     const [wx, wy] = [this.root.x, this.root.y + this.content.y + 65];
     sparkleBurst(this, wx, wy, 20, 70);
     const reward = result.reward!;
@@ -178,8 +213,8 @@ export class ShopScene extends Phaser.Scene {
     const cardW = (this.panelW - 56 - (cols - 1) * gapX) / cols;
     const cardH = 226;
     const startX = -(cols - 1) * (cardW + gapX) * 0.5;
-    const startY = 146 + cardH / 2;
-    this.contentHeight = 146 + Math.ceil(items.length / cols) * (cardH + gapY);
+    const startY = GRID_TOP + cardH / 2;
+    this.contentHeight = GRID_TOP + Math.ceil(items.length / cols) * (cardH + gapY);
     items.forEach((item, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
@@ -228,7 +263,7 @@ export class ShopScene extends Phaser.Scene {
       this.toast(res.reason === "cannot afford" ? "Not enough coins yet." : "Couldn't buy that.");
       return;
     }
-    Sfx.tap();
+    audio.playSfx("shop_purchase");
     this.toast(`${item.label} added! Place it in the garden.`);
     this.rebuild();
   }
@@ -242,8 +277,8 @@ export class ShopScene extends Phaser.Scene {
     const cardW = (this.panelW - 56 - (cols - 1) * gapX) / cols;
     const cardH = 226;
     const startX = -(cols - 1) * (cardW + gapX) * 0.5;
-    const startY = 146 + cardH / 2;
-    this.contentHeight = 146 + Math.ceil(items.length / cols) * (cardH + gapY);
+    const startY = GRID_TOP + cardH / 2;
+    this.contentHeight = GRID_TOP + Math.ceil(items.length / cols) * (cardH + gapY);
     items.forEach((item, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
@@ -365,13 +400,13 @@ export class ShopScene extends Phaser.Scene {
           if (!owned) {
             const res = shop.buyAccessory(item.id);
             if (!res.ok) { this.toast(res.reason === "cannot afford" ? "Not enough coins yet." : "Couldn't buy that."); return; }
-            Sfx.tap();
+            audio.playSfx("shop_purchase");
             this.rebuild();
             this.openEquipPanel(item, selected.id); // reopen in place, now showing Equip
             return;
           }
           const res = shop.equip(selected.id, item.id);
-          if (res.ok) { Sfx.bloomChime(); this.closeEquipPanel(); this.toast(`${selected.name} is wearing ${item.label}!`); }
+          if (res.ok) { audio.playSfx("accessory_equip"); this.closeEquipPanel(); this.toast(`${selected.name} is wearing ${item.label}!`); }
         },
       }));
     }

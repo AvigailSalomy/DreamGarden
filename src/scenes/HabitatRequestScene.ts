@@ -7,7 +7,7 @@ import { habitatFor, type RestorationResource } from "../data/habitats";
 import { RESOURCES } from "../data/resources";
 import { silhouetteTextureKey } from "../world/silhouette";
 import { sparkleBurst } from "../fx/Particles";
-import { Sfx } from "../fx/Sfx";
+import { audio } from "../audio/AudioManager";
 
 function shortName(full: string): string {
   return full.split(" ")[0];
@@ -75,9 +75,12 @@ export class HabitatRequestScene extends Phaser.Scene {
     const habitat = habitatFor(this.objectId)!;
     const next = habitat.resources.find(r=>!requests.isSourceRestored(r.id));
     if (!next) {
-      // all 3 restored — this IS the rescue trigger
+      // all 3 restored — this IS the rescue trigger. The Garden must stay
+      // PAUSED under the puzzle (puzzle:start pauses it), so this panel just
+      // goes away without resuming it; PuzzleScene resumes it when it closes.
+      this.closing = true;
       bus.emit("puzzle:start", { objectId: this.objectId });
-      this.close();
+      this.scene.stop();
       return;
     }
     if (requests.canRestoreSource(next)) this.message.setText("Your materials are ready. Choose Restore on a card.");
@@ -115,23 +118,24 @@ export class HabitatRequestScene extends Phaser.Scene {
     bus.emit("resourceAcquisition:open", payload);
   }
   /**
-   * Restore is explicit and ONE resource at a time — after this fires, we
-   * close the panel (a brief celebratory beat first) so the player watches
-   * the actual world object transform, unobstructed, rather than seeing it
-   * happen behind the panel. They tap the animal again for the next one.
+   * Restore is explicit and ONE resource at a time. After a short celebratory
+   * beat the panel closes so the player watches the world object transform;
+   * GardenScene then reopens this same screen automatically (see
+   * presentRestoreThenReturn) — no need to tap the animal again.
    */
   private restore(res:RestorationResource): void {
     if (this.completing || !requests.restoreSourceNow(res).ok) return;
     this.completing = true;
     this.rebuild();
-    Sfx.bloomChime();
+    audio.playSfx("restore_confirm");
     sparkleBurst(this,this.scale.width/2,this.scale.height/2,22,85);
     const habitat=habitatFor(this.objectId)!;
     if (habitat.resources.every(r=>requests.isSourceRestored(r.id))) {
       this.message.setText(`${habitat.name} is ready to bloom!`).setColor("#507539");
-      this.tweens.add({targets:this.root,angle:{from:-1,to:1},duration:180,yoyo:true,repeat:2});
+    } else {
+      this.message.setText(`Restoring the ${res.label}…`).setColor("#507539");
     }
-    this.time.delayedCall(650,()=>this.close());
+    this.time.delayedCall(320,()=>this.close());
   }
   /** All 3 sources restored, but the puzzle/rescue hasn't happened yet — the
    *  moment this screen exists to build toward. Reflects it in the message +
