@@ -16,6 +16,7 @@ import { NATIVE_FACING, PERSONALITIES, areaAt, type Pt } from "../world/animalBe
 import { FROSTED_ROAM } from "../data/frostedRoam";
 import { FrostedStoryDirector } from "../story/FrostedStoryDirector";
 import { SHOP_LOCKED_HINT, storyFor } from "../data/frostedStory";
+import { FrostedAccessoryRig } from "../world/FrostedAccessoryRig";
 
 /**
  * Frosted Valley — a second, larger world built from the supplied production
@@ -370,6 +371,7 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.zoneItems = {};
     this.hintBusy = false;
     this.shopPlacementSprites.clear();
+    this.wornRigs.clear();
     this.placementMenu = undefined;
     this.placementController = new FrostedPlacementController(this);
 
@@ -390,6 +392,10 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.buildGlade();
     this.buildAnimals();
     this.renderShopPlacements();
+    this.syncWornAccessories();
+    // the Shop just closed (or any overlay did): show whatever the animals are wearing now
+    this.events.on(Phaser.Scenes.Events.RESUME, this.syncWornAccessories, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, this.syncWornAccessories, this));
     this.buildForeground();
     this.buildSnowfall();
 
@@ -1635,6 +1641,23 @@ export class FrostedValleyScene extends Phaser.Scene {
   }
 
   /** Every previously-placed Shop decoration, rebuilt fresh on load — see FrostedShopService. */
+  private wornRigs = new Map<string, FrostedAccessoryRig>();
+
+  /** Make every unlocked animal in the valley wear exactly what the Shop says it's equipped with. */
+  private syncWornAccessories(): void {
+    for (const rec of Object.values(this.zoneAnimals) as ZoneAnimalRec[]) {
+      if (!rec.npc || !rec.animalId) continue;
+      const id = frostedShop.equippedFor(rec.animalId);
+      const cur = this.wornRigs.get(rec.animalId);
+      if (cur && cur.itemId === id) continue;
+      cur?.destroy();
+      this.wornRigs.delete(rec.animalId);
+      const def = id ? frostedShop.def(id) : undefined;
+      if (!def) continue;
+      this.wornRigs.set(rec.animalId, new FrostedAccessoryRig(this, rec.npc.sprite, rec.animalId, def));
+    }
+  }
+
   private renderShopPlacements(): void {
     for (const p of frostedShop.listPlacements()) this.spawnPlacementSprite(p);
   }
