@@ -31,8 +31,8 @@ export const MAZE_LEVELS: Record<MazeDifficulty, MazeLevelConfig> = {
     rows: 9,
     seed: 1001,
     loopFactor: 0.16,
-    enemyCount: 2,
-    enemySpeed: 78,
+    enemyCount: 3,
+    enemySpeed: 82, // original: 2 enemies @ 78 — now +1 enemy, +5% speed
     leafCount: 16,
     magicFlowerCount: 1,
     lives: 3,
@@ -43,8 +43,8 @@ export const MAZE_LEVELS: Record<MazeDifficulty, MazeLevelConfig> = {
     rows: 11,
     seed: 2002,
     loopFactor: 0.14,
-    enemyCount: 3,
-    enemySpeed: 92,
+    enemyCount: 4,
+    enemySpeed: 97, // original: 3 @ 92
     leafCount: 22,
     magicFlowerCount: 1,
     lives: 3,
@@ -55,8 +55,8 @@ export const MAZE_LEVELS: Record<MazeDifficulty, MazeLevelConfig> = {
     rows: 13,
     seed: 3003,
     loopFactor: 0.12,
-    enemyCount: 4,
-    enemySpeed: 104,
+    enemyCount: 5,
+    enemySpeed: 110, // original: 4 @ 104
     leafCount: 28,
     magicFlowerCount: 2,
     lives: 3,

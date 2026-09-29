@@ -414,18 +414,6 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     if (revealed.overview_text) this.toast(revealed.overview_text);
     await wait(this, 1100);
 
-    // Part I: the FIRST time Nibs is rescued, open the Shop before moving on
-    // to the next animal — a short, one-time beat, not a tutorial.
-    if (revealed.id === "rabbit" && !shop.isUnlocked) {
-      shop.unlock();
-      this.refreshShopLockVisual();
-      if (this.shopBuilding) {
-        await this.camera.focusOn(this.shopBuilding.x, this.shopBuilding.y - 60, 800, 1.05);
-        this.toast("The Garden Shop is now open!");
-        await wait(this, 1100);
-      }
-    }
-
     // The sequential hand-off (Part H): wake the next animal's silhouette,
     // tour its habitat + damaged sources, then hand control back. CATALOG is
     // exactly the six animals now (no intermediate non-animal task), so this
@@ -826,8 +814,8 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
    * every habitat/animal/resource and the cottage. Grounded the same way as
    * every other structure (dprop's soft elliptical shadow, no platform),
    * with its own small flower/path accents so it reads as belonging to the
-   * garden rather than dropped in on bare grass. Locked (visible, dimmed,
-   * non-interactive) until shop.isUnlocked — see runPostStage's Part I hook.
+   * garden rather than dropped in on bare grass. Always open — tap it any
+   * time to enter (there is no progression requirement).
    */
   private shopBuilding?: Phaser.GameObjects.Image;
   private buildShop(): void {
@@ -840,20 +828,10 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.shopBuilding = shopImg;
     shopImg.setInteractive({ useHandCursor: true });
     shopImg.on("pointerup", () => this.handleShopTap());
-    this.refreshShopLockVisual();
-  }
-
-  private refreshShopLockVisual(): void {
-    if (!this.shopBuilding) return;
-    this.shopBuilding.setAlpha(shop.isUnlocked ? 1 : 0.55);
-    this.shopBuilding.setTint(shop.isUnlocked ? 0xffffff : 0x9aa08c);
   }
 
   private handleShopTap(): void {
-    if (!shop.isUnlocked) {
-      this.toast("Rescue Nibs to open the Garden Shop!");
-      return;
-    }
+    // no progression gate — only wait while a cinematic/reveal/letter is playing
     if (this.flowBusy || this.reveal.isRunning || this.letterUp) return;
     bus.emit("shop:open", {});
   }

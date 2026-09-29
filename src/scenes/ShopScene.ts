@@ -7,6 +7,7 @@ import { bus, economy, progression, shop } from "../game/services";
 import { CATALOG } from "../data/objects";
 import {
   ACCESSORY_CATALOG,
+  DECOR_CATALOG,
   accessoryIconFor,
   accessoryItem,
   calculateAccessoryTransform,
@@ -199,9 +200,16 @@ export class ShopScene extends Phaser.Scene {
     const reward = result.reward!;
     const displayName =
       reward.kind === "accessory" ? accessoryItem(reward.refId)?.label : decorItem(reward.refId)?.label;
-    this.toast(`You received: ${displayName ?? reward.refId}! ✨`);
     void card;
-    this.rebuild();
+    if (reward.kind === "decor") {
+      // show it where it can be placed: Daily tab → "Your Garden Items"
+      this.toast(`You received: ${displayName ?? reward.refId}! ✨ Find it under Your Garden Items to place it.`);
+      if (this.tab !== "daily") this.setTab("daily");
+      else this.rebuild();
+    } else {
+      this.toast(`You received: ${displayName ?? reward.refId}! ✨ Equip it from Accessories.`);
+      this.rebuild();
+    }
   }
 
   /* ---------------- Daily ---------------- */
@@ -214,7 +222,6 @@ export class ShopScene extends Phaser.Scene {
     const cardH = 226;
     const startX = -(cols - 1) * (cardW + gapX) * 0.5;
     const startY = GRID_TOP + cardH / 2;
-    this.contentHeight = GRID_TOP + Math.ceil(items.length / cols) * (cardH + gapY);
     items.forEach((item, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
@@ -222,6 +229,34 @@ export class ShopScene extends Phaser.Scene {
       const y = startY + row * (cardH + gapY);
       this.content.add(this.buildDecorCard(item, x, y, cardW, cardH));
     });
+
+    // "Your Garden Items": EVERY decoration the player owns but hasn't placed
+    // yet — bought or won from the Mystery Gift — whether or not it's in
+    // today's Daily rotation (otherwise a won item had no card to place from).
+    let y0 = GRID_TOP + Math.ceil(items.length / cols) * (cardH + gapY) + 10;
+    this.content.add(this.add.text(0, y0 + 16, "Your Garden Items", { ...labelStyle(22), color: "#5b3d22" }).setOrigin(0.5));
+    y0 += 44;
+    const owned = DECOR_CATALOG.filter((d) => shop.decorOwnedCount(d.id) > 0);
+    if (!owned.length) {
+      this.content.add(
+        this.add
+          .text(0, y0 + 18, "Items you buy or win appear here — tap Place to put them in your garden.", {
+            ...labelStyle(15),
+            color: "#8a6a4a",
+            align: "center",
+            wordWrap: { width: this.panelW - 80 },
+          })
+          .setOrigin(0.5),
+      );
+      this.contentHeight = y0 + 60;
+      return;
+    }
+    owned.forEach((item, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      this.content.add(this.buildDecorCard(item, startX + col * (cardW + gapX), y0 + cardH / 2 + row * (cardH + gapY), cardW, cardH));
+    });
+    this.contentHeight = y0 + Math.ceil(owned.length / cols) * (cardH + gapY);
   }
 
   private buildDecorCard(item: DecorCatalogItem, x: number, y: number, w: number, h: number): Phaser.GameObjects.Container {
@@ -237,6 +272,12 @@ export class ShopScene extends Phaser.Scene {
     );
     const owned = shop.decorOwnedCount(item.id);
     const btnLabel = owned > 0 ? `Place (${owned})` : `${item.cost}`;
+    if (owned > 0) {
+      // clear "you own this" badge — placing it never costs anything
+      const badge = makePill(this, 96, 28).setPosition(w / 2 - 58, -h / 2 + 24);
+      badge.add(this.add.text(0, 0, `Owned ×${owned}`, { ...labelStyle(14), color: "#507539" }).setOrigin(0.5));
+      c.add(badge);
+    }
     c.add(
       new Button(this, 0, h * 0.36, {
         width: w - 30,

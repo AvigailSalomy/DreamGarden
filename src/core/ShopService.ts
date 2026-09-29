@@ -40,12 +40,14 @@ export class ShopService {
     return this.save.state.shop;
   }
 
+  /** The Dream Garden Shop is always open — there is no progression gate on
+   *  entering it. (The saved `unlocked` flag is kept only so older saves load.) */
   get isUnlocked(): boolean {
-    return this.s.unlocked;
+    return true;
   }
 
-  /** Called once, right after Nibs's (the rabbit's) first rescue — see
-   *  GardenScene's Part I hand-off. Idempotent. */
+  /** Legacy: used to open the Shop after Nibs's first rescue. The Shop is
+   *  always open now; kept so old saves/callers stay valid. Idempotent. */
   unlock(): void {
     if (this.s.unlocked) return;
     this.s.unlocked = true;

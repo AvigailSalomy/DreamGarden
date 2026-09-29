@@ -7,6 +7,7 @@ import { ProgressionService } from "../src/core/ProgressionService";
 import { ShopService } from "../src/core/ShopService";
 import { CATALOG } from "../src/data/objects";
 import { rollDailyItems } from "../src/data/shop";
+import { SHOP_ECONOMY } from "../src/data/economy";
 const key = "dreamgarden.shop.test";
 function stack() {
   const save = new SaveService(key), bus = new Emitter<GameEvents>();
@@ -44,7 +45,7 @@ describe("Shop regression: shared currency and persistent personalization", () =
     expect(next.shop.placedDecor()).toHaveLength(1);expect(next.shop.decorOwnedCount("bench")).toBe(0);
   });
   it("charges exactly once per gift and cannot spend below zero or duplicate accessory ownership", () => {
-    const {save,economy,shop}=stack(); save.state.coins=500;
+    const {save,economy,shop}=stack(); save.state.coins=SHOP_ECONOMY.mysteryGift;
     const gift=shop.openMysteryGift();expect(gift.ok).toBe(true);expect(gift.reward).toBeTruthy();
     expect(economy.coins).toBe(0);expect(shop.openMysteryGift().ok).toBe(false);
     expect(stack().save.state.shop.mysteryGiftsOpened).toBe(1);

@@ -13,6 +13,8 @@ import { Sfx } from "../fx/Sfx";
 import { sparkleBurst, petalPuff } from "../fx/Particles";
 import { audio } from "../audio/AudioManager";
 import { facingFlipX, moveWithCollision } from "../core/mazeMovement";
+import { pathDistances, pickEnemySpawns } from "../core/mazeSpawns";
+import { enemiesToYield } from "../core/mazeFairness";
 
 export interface MazeInit {
   objectId: string;
@@ -25,6 +27,30 @@ const CELL = 64;
 const PLAYER_SPEED = 148;
 const PLAYER_R = 20;
 const ENEMY_R = 18;
+/** Opening breathing room: nobody chases for the first few seconds of a run. */
+const GRACE_MS = 5000;
+/** The ONE active pursuer (nearest-spawned enemy) takes the junction branch
+ *  toward the player this often; otherwise it wanders like everyone else. */
+const PURSUER_BIAS = 0.5;
+/** …but not once it's this close (tiles of corridor) — so it doesn't glue itself to the player. */
+const PURSUER_BACKOFF_TILES = 3;
+/** After a hit the pursuer stops pursuing for a moment while the player respawns. */
+const HIT_COOLDOWN_MS = 4000;
+/** Pursuer "engaged" burst: once it gets within ENGAGE_SIGHT_TILES of the
+ *  player it follows more consistently (ENGAGED_BIAS, backing off only inside
+ *  ENGAGED_BACKOFF_TILES) for up to ENGAGE_MS, then rests for ENGAGE_REST_MS at
+ *  the normal PURSUER_BIAS so it can't glue itself to the player. The burst
+ *  also ends early if the player gets clear (> ENGAGE_LOSE_TILES away). */
+const ENGAGE_SIGHT_TILES = 16;
+const ENGAGE_LOSE_TILES = 18;
+const ENGAGED_BIAS = 0.75;
+const ENGAGED_BACKOFF_TILES = 2;
+const ENGAGE_MS = 6000;
+const ENGAGE_REST_MS = 5000;
+/** "Close to the player" for the anti-trap rule (tiles of corridor). */
+const THREAT_ZONE_TILES = 5;
+/** How long an enemy that was blocking the player's only way out keeps clear of it. */
+const YIELD_MS = 3000;
 const INVULN_MS = 1400;
 const MAGIC_MS = 6000;
 
@@ -48,6 +74,13 @@ interface Enemy {
   ty: number;
   dirX: number;
   dirY: number;
+  /** The single active pursuer (nearest-spawned enemy): after the opening grace
+   *  period it leans toward the player at junctions. Everyone else only wanders. */
+  pressure?: boolean;
+  /** Anti-chokepoint yield (see applyEscapeFairness): until this time the enemy
+   *  keeps off `avoid` and won't step closer to the player. */
+  yieldUntil?: number;
+  avoid?: Set<string>;
 }
 
 function pickDifficulty(amount: number): keyof typeof MAZE_LEVELS {
@@ -119,6 +152,56 @@ export class GardenMazeScene extends Phaser.Scene {
   private py = 0;
 
   private enemies: Enemy[] = [];
+  /** Scene time from which the active pursuer may lean toward the player. */
+  private pursuitFrom = 0;
+  /** Pursuer burst state: engaged until `engagedUntil`; may not re-engage before `engageRestUntil`. */
+  private engagedUntil = 0;
+  private engageRestUntil = 0;
+  private playerDistCache?: { key: string; d: Map<string, number> };
+
+  private lastFairnessCheck = -1e9;
+  private lastFairnessTile = "";
+
+  /**
+   * Anti-chokepoint rule (core/mazeFairness.ts): if every viable way out of the
+   * player's position has an enemy on it — even a single enemy at the mouth of
+   * a dead-end corridor — the enemies on one exit yield: turn back right away
+   * if they were heading in, keep off that escape branch for YIELD_MS, and
+   * never step closer meanwhile. Challenge is kept: contact still hurts.
+   */
+  private applyEscapeFairness(time: number): void {
+    const tx = Math.floor(this.px / CELL), ty = Math.floor(this.py / CELL);
+    const tileKey = `${tx},${ty}`;
+    if (tileKey === this.lastFairnessTile && time - this.lastFairnessCheck < 150) return;
+    this.lastFairnessTile = tileKey;
+    this.lastFairnessCheck = time;
+    const order = enemiesToYield(
+      this.grid,
+      { tx, ty },
+      this.enemies.map((e) => ({ tx: Math.floor(e.x / CELL), ty: Math.floor(e.y / CELL) })),
+      this.enemies.findIndex((e) => e.pressure),
+    );
+    if (!order.enemies.length) return;
+    const d = this.playerPathDistances();
+    const distOf = (x: number, y: number) => d.get(`${x},${y}`) ?? 1e9;
+    for (const i of order.enemies) {
+      const e = this.enemies[i];
+      e.yieldUntil = time + YIELD_MS;
+      e.avoid = order.avoid;
+      // heading in toward the player? turn back now instead of blocking the exit
+      if (distOf(e.tx, e.ty) < distOf(e.cx, e.cy)) {
+        [e.tx, e.ty, e.cx, e.cy] = [e.cx, e.cy, e.tx, e.ty];
+      }
+    }
+  }
+
+  /** Corridor distance from the player's tile to every tile (cached per tile). */
+  private playerPathDistances(): Map<string, number> {
+    const tx = Math.floor(this.px / CELL), ty = Math.floor(this.py / CELL);
+    const key = `${tx},${ty}`;
+    if (this.playerDistCache?.key !== key) this.playerDistCache = { key, d: pathDistances(this.grid.walls, { tx, ty }) };
+    return this.playerDistCache.d;
+  }
   private collectibles: Collectible[] = [];
 
   private collectedTarget = 0;
@@ -357,16 +440,23 @@ export class GardenMazeScene extends Phaser.Scene {
       { key: "maze_mud", color: "#8a6a4a", spike: false },
       { key: "maze_shadow", color: "#5b4a78", spike: false },
     ];
-    const opens = this.grid.cellTiles;
-    const start = opens[0];
-    // spawn enemies away from the player's start cell
-    const far = [...opens].sort(
-      (a, b) => Math.hypot(b.tx - start.tx, b.ty - start.ty) - Math.hypot(a.tx - start.tx, a.ty - start.ty),
+    // Spread across the maze by corridor distance (one at medium range so it
+    // matters early, the rest in different areas), outside a safety zone and
+    // never on a target or magic flower — see core/mazeSpawns.ts.
+    const blocked = new Set(
+      this.collectibles
+        .filter((c) => c.kind !== "coin" && c.kind !== "leaf")
+        .map((c) => `${Math.floor(c.x / CELL)},${Math.floor(c.y / CELL)}`),
     );
-    for (let i = 0; i < this.cfg.enemyCount; i++) {
+    const spawns = pickEnemySpawns(this.grid, this.cfg.enemyCount, blocked);
+    this.pursuitFrom = this.time.now + GRACE_MS;
+    this.engagedUntil = 0;
+    this.engageRestUntil = 0;
+    this.playerDistCache = undefined;
+    for (let i = 0; i < spawns.length; i++) {
       const kind = kinds[i % kinds.length];
       const tex = bakeEnemyTexture(this, kind.key, kind.color, kind.spike);
-      const cell = far[i % far.length];
+      const cell = spawns[i];
       const img = this.add.image(0, 0, tex).setDisplaySize(ENEMY_R * 2.1, ENEMY_R * 2.1).setDepth(21);
       this.root.add(img);
       this.enemies.push({
@@ -377,6 +467,7 @@ export class GardenMazeScene extends Phaser.Scene {
         cy: cell.ty,
         tx: cell.tx,
         ty: cell.ty,
+        pressure: i === 0, // the single active pursuer (see PURSUER_BIAS)
         dirX: 0,
         dirY: 0,
       });
@@ -569,6 +660,7 @@ export class GardenMazeScene extends Phaser.Scene {
 
   private updateEnemies(dt: number, time: number): void {
     const rng = this.enemyRng ?? (this.enemyRng = new Phaser.Math.RandomDataGenerator([String(this.cfg.seed + 99)]));
+    this.applyEscapeFairness(time);
     for (const e of this.enemies) {
       const targetX = e.tx * CELL + CELL / 2;
       const targetY = e.ty * CELL + CELL / 2;
@@ -605,20 +697,50 @@ export class GardenMazeScene extends Phaser.Scene {
         if (!next) {
           // dead end — reverse
           next = { tx: e.cx, ty: e.cy };
-        } else if (rng.frac() < 0.4) {
-          // bias toward the player when nearby, for a bit of real chase feel
-          const distToPlayer = Math.hypot(this.px - e.x, this.py - e.y);
-          if (distToPlayer < CELL * 5) {
-            let best = options[0];
-            let bestD = Infinity;
-            for (const o of options) {
-              const d = Math.hypot(o.tx * CELL - this.px, o.ty * CELL - this.py);
-              if (d < bestD) {
-                bestD = d;
-                best = o;
+        } else if (e.yieldUntil !== undefined && time < e.yieldUntil) {
+          // yielding: keep off the player's escape branch and don't step closer
+          const d = this.playerPathDistances();
+          const distOf = (x: number, y: number) => d.get(`${x},${y}`) ?? 1e9;
+          const here = distOf(e.tx, e.ty);
+          const ok = options.filter((o) => !e.avoid?.has(`${o.tx},${o.ty}`) && distOf(o.tx, o.ty) >= here);
+          const offBranch = options.filter((o) => !e.avoid?.has(`${o.tx},${o.ty}`));
+          const pool = ok.length ? ok : offBranch;
+          if (pool.length) next = pool[rng.between(0, pool.length - 1)];
+        } else {
+          // Fair-pursuit rules (Dream Garden): at most ONE enemy ever hunts, and
+          // nobody piles onto a player who is already being threatened. Choices
+          // only happen at junctions, so it all reads as ordinary wandering.
+          const d = this.playerPathDistances();
+          const tileKey = (x: number, y: number) => `${x},${y}`;
+          const distOf = (x: number, y: number) => d.get(tileKey(x, y)) ?? 1e9;
+          const here = distOf(e.tx, e.ty);
+          const othersClose = this.enemies.filter(
+            (o) => o !== e && distOf(Math.floor(o.x / CELL), Math.floor(o.y / CELL)) <= THREAT_ZONE_TILES,
+          ).length;
+          if (e.pressure) {
+            // the active pursuer: after the grace period, a moderate lean — not
+            // when it's already right there, and not onto two others. Within
+            // sight it "engages" for a short burst of more consistent pressure.
+            if (time >= this.pursuitFrom) {
+              if (time < this.engagedUntil && here > ENGAGE_LOSE_TILES) {
+                this.engagedUntil = 0; // the player got clear — burst over, rest
+                this.engageRestUntil = time + ENGAGE_REST_MS;
+              } else if (time >= this.engagedUntil && time >= this.engageRestUntil && here <= ENGAGE_SIGHT_TILES) {
+                this.engagedUntil = time + ENGAGE_MS;
+                this.engageRestUntil = this.engagedUntil + ENGAGE_REST_MS;
               }
             }
-            next = best;
+            const engaged = time < this.engagedUntil;
+            const bias = engaged ? ENGAGED_BIAS : PURSUER_BIAS;
+            const backoff = engaged ? ENGAGED_BACKOFF_TILES : PURSUER_BACKOFF_TILES;
+            if (time >= this.pursuitFrom && here > backoff && othersClose < 2 && options.length > 1 && rng.frac() < bias) {
+              next = options.reduce((a2, b2) => (distOf(b2.tx, b2.ty) < distOf(a2.tx, a2.ty) ? b2 : a2));
+            }
+          } else if (othersClose >= 1) {
+            // everyone else never chases, and won't close in on a player someone
+            // is already near: take a branch that doesn't lead closer
+            const away = options.filter((o) => distOf(o.tx, o.ty) >= here);
+            if (away.length) next = away[rng.between(0, away.length - 1)];
           }
         }
         e.cx = e.tx;
@@ -694,6 +816,11 @@ export class GardenMazeScene extends Phaser.Scene {
     this.cameras.main.shake(180, 0.008);
     this.refreshHud();
     this.tweens.add({ targets: this.playerBody, alpha: 0.3, duration: 120, yoyo: true, repeat: 4 });
+    // after a hit the pursuer backs off for a moment so it doesn't camp the
+    // (often dead-end) respawn corner while the player gets moving
+    this.pursuitFrom = Math.max(this.pursuitFrom, time + HIT_COOLDOWN_MS);
+    this.engagedUntil = 0;
+    this.engageRestUntil = time + HIT_COOLDOWN_MS + ENGAGE_REST_MS;
     // respawn near start, safely away from enemies
     const spawn = this.grid.cellTiles[0];
     this.px = spawn.tx * CELL + CELL / 2;

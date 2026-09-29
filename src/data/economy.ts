@@ -7,4 +7,4 @@ export const MAZE_ECONOMY = {
 export const MAZE_LEAF_SUCCESS_VALUE = 1;
 /** puzzleHint: a consumable — about one medium maze run of coins (36) plus
  *  leaves, and well under the cheapest permanent decor (basicMinimum). */
-export const SHOP_ECONOMY = { basicMinimum: 150, mysteryGift: 500, puzzleHint: 40 } as const;
+export const SHOP_ECONOMY = { basicMinimum: 150, mysteryGift: 400, puzzleHint: 40 } as const;
