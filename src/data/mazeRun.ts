@@ -81,6 +81,22 @@ export function difficultyForOrder(order: number): Difficulty {
 }
 
 export const PLAYER_MS_PER_CELL = 205;
+/**
+ * How far (in TILES TRAVELLED, not time) a tapped turn stays buffered: it is
+ * taken at the first opening the player reaches within this distance, so a
+ * turn can be pressed up to 3 tiles ahead of a narrow opening — and one that
+ * finds no opening within 3 tiles is dropped instead of firing much later as
+ * a surprise. Standing still never uses it up; a held key never expires.
+ */
+export const TURN_BUFFER_TILES = 3;
+/**
+ * Pressing a turn up to this far (in tiles) PAST a junction's centre still
+ * takes that junction: the player steps back onto it and turns, instead of
+ * running on to wherever the next opening happens to be. Half a tile is
+ * ~100ms at player speed — about a person's reaction slack — and up to that
+ * point the player is still closer to the junction than to the next tile.
+ */
+export const LATE_TURN_T = 0.5;
 export const START_LIVES = 3;
 /** Hearts can top lives up to this, never beyond. */
 export const MAX_LIVES = 5;
@@ -191,7 +207,12 @@ export interface PlayerState {
   /** 0..1 progress from `cell` to `next`. */
   t: number;
   dir: Dir | null;
+  /** The buffered turn: taken at the first opening (see setWantDir). */
   wantDir: Dir | null;
+  /** Is the key for `wantDir` physically held? A held turn waits for an opening indefinitely. */
+  wantHeld: boolean;
+  /** Tiles travelled since `wantDir` was pressed (or its key released) — a tapped turn expires after TURN_BUFFER_TILES. */
+  wantTiles: number;
 }
 
 export type EnemyMode = "sleeping" | "active" | "frightened" | "returning" | "respawning";
@@ -308,7 +329,7 @@ export class MazeRun {
     this.rand = cfg.rand;
     this.bankedCoinKeys = new Set(cfg.bankedCoinKeys ?? []);
     this.startDist = this.grid.distances(this.grid.start);
-    this.player = { cell: { ...this.grid.start }, next: null, t: 0, dir: null, wantDir: null };
+    this.player = { cell: { ...this.grid.start }, next: null, t: 0, dir: null, wantDir: null, wantHeld: false, wantTiles: 0 };
 
     this.placeEnemies(cfg);
     if (!cfg.bare) {
@@ -600,9 +621,53 @@ export class MazeRun {
 
   /* ---------------- input / queries ---------------- */
 
-  /** Buffered: the player turns this way at the first opportunity, and keeps going until a wall. */
-  setWantDir(dir: Dir): void {
-    this.player.wantDir = dir;
+  /**
+   * Steer. The player keeps moving until a wall; `dir` is buffered and taken
+   * at the first opening:
+   *  - the opposite of the current heading reverses on the spot;
+   *  - a turn pressed just past a junction (≤ LATE_TURN_T) steps back and
+   *    takes that junction rather than running on;
+   *  - `held` (key still down) keeps the turn buffered until an opening
+   *    comes; a tap expires after TURN_BUFFER_TILES tiles so it can't fire
+   *    later as a surprise turn.
+   * Ignored once the run is over.
+   */
+  setWantDir(dir: Dir, held = false): void {
+    if (this.status === "won" || this.status === "lost") return;
+    const p = this.player;
+    p.wantDir = dir;
+    p.wantHeld = held;
+    p.wantTiles = 0;
+
+    const perpendicular = !!p.dir && p.dir.dr * dir.dr + p.dir.dc * dir.dc === 0;
+    if (
+      p.next &&
+      p.dir &&
+      perpendicular &&
+      p.t <= LATE_TURN_T &&
+      this.grid.isOpen(p.cell.row + dir.dr, p.cell.col + dir.dc)
+    ) {
+      // just passed a junction that has this opening: step back onto it; the
+      // arrival there takes the turn
+      const back = p.cell;
+      p.cell = p.next;
+      p.next = back;
+      p.t = 1 - p.t;
+      p.dir = { dr: -p.dir.dr, dc: -p.dir.dc };
+    }
+  }
+
+  /** The key for `dir` was released: a still-pending turn now expires after TURN_BUFFER_TILES more tiles. */
+  releaseWantDir(dir: Dir): void {
+    const p = this.player;
+    if (!p.wantDir || !p.wantHeld || p.wantDir.dr !== dir.dr || p.wantDir.dc !== dir.dc) return;
+    p.wantHeld = false;
+    p.wantTiles = 0;
+  }
+
+  /** Every key released (e.g. the window lost focus mid-press). */
+  releaseAllWantDirs(): void {
+    if (this.player.wantDir) this.releaseWantDir(this.player.wantDir);
   }
 
   /** Fractional (row, col) of the player — for rendering and contact tests. */
@@ -695,6 +760,15 @@ export class MazeRun {
   private stepPlayer(dt: number, events: RunEvent[]): void {
     const p = this.player;
     const open = (c: Cell, d: Dir | null) => !!d && this.grid.isOpen(c.row + d.dr, c.col + d.dc);
+
+    // a tapped turn that found no opening within TURN_BUFFER_TILES of
+    // travel is dropped — measured along the maze, so it never lapses while
+    // the player stands still, and never fires far down the corridor later
+    if (p.wantDir && !p.wantHeld && p.next) {
+      p.wantTiles += dt / PLAYER_MS_PER_CELL;
+      const isHeading = !!p.dir && p.dir.dr === p.wantDir.dr && p.dir.dc === p.wantDir.dc;
+      if (p.wantTiles > TURN_BUFFER_TILES && !isHeading) p.wantDir = null;
+    }
 
     if (p.next && p.wantDir && p.dir && p.wantDir.dr === -p.dir.dr && p.wantDir.dc === -p.dir.dc) {
       // instant reversal mid-corridor — essential for dodging
@@ -949,6 +1023,8 @@ export class MazeRun {
     this.player.t = 0;
     this.player.dir = null;
     this.player.wantDir = null;
+    this.player.wantHeld = false;
+    this.player.wantTiles = 0;
     this.protectMs = RESPAWN_PROTECT_MS;
     if (this.powerMs > 0) {
       this.powerMs = 0;

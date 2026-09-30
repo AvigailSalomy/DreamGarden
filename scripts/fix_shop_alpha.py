@@ -138,104 +138,117 @@ def fix_alpha(img: Image.Image) -> Image.Image:
 
 
 # "glow" jobs: art with a soft colored glow/sparkle halo painted over the fake
-# checkerboard (2048px canvas, 50×50 cells alternating 0 and 60 gray). The
-# glow tints the checker squares so they fail is_bg_candidate and survive as
-# a visible tinted checkerboard ring. Instead, reconstruct the checker color
-# expected at each pixel and difference-matte against it: the glow (additive
-# light over the placeholder) becomes real semi-transparent color.
-CHECKER_CELL = 2048 / 50
-CHECKER_DARK, CHECKER_LIGHT = 0, 60
-GLOW_SOLID = 70  # channel difference from the checker at which a pixel is fully opaque art
-GLOW_FLOOR = 10  # below this it is just JPEG noise over the checker
-GLOW_POCKET_THRESHOLD = 3000  # enclosed low-difference regions this big (e.g. a wreath's hole) are background too
+# checkerboard (2048px canvas, a 50×50 grid of dark/light gray cells whose
+# exact shades vary per image and drift across it). The glow tints the
+# checker squares so they fail is_bg_candidate, and fix_alpha keeps them as a
+# visible tinted checkerboard ring. Per pixel, dim glow and dark art are
+# indistinguishable — but spatially they differ: wherever the checker still
+# shows through, neighboring light and dark cells stay apart in brightness,
+# while over solid art that parity contrast averages out. So measure, per
+# cell, how much of the checker's own light/dark contrast survives (that is
+# how much background shows through), and un-composite only there.
+CHECKER_CELLS = 50
+HALO_OPAQUE = 0.9  # a cell showing less checker than this fraction of full contrast is left as fix_alpha had it
+
+
+def estimate_checker(px, w, h):
+    """Per-cell background gray: measured where the cell is clean, else borrowed from the nearest clean same-parity cells."""
+    n = CHECKER_CELLS
+    cw, ch = w / n, h / n
+    val = [[None] * n for _ in range(n)]
+    for j in range(n):
+        for i in range(n):
+            xs = range(int(i * cw) + 5, int((i + 1) * cw) - 5, 3)
+            ys = range(int(j * ch) + 5, int((j + 1) * ch) - 5, 3)
+            samples = [px[x, y] for y in ys for x in xs]
+            spread = max(max(s[:3]) - min(s[:3]) for s in samples)
+            lum = sorted(sum(s[:3]) / 3 for s in samples)
+            if spread <= 12 and lum[-1] - lum[0] <= 16:
+                val[j][i] = lum[len(lum) // 2]
+    out = [[0.0] * n for _ in range(n)]
+    for j in range(n):
+        for i in range(n):
+            if val[j][i] is not None:
+                out[j][i] = val[j][i]
+                continue
+            # same-parity neighbors only (diagonals / two steps away), widening until found
+            for rad in range(2, n, 2):
+                picks = [val[jj][ii] for jj in range(max(0, j - rad), min(n, j + rad + 1))
+                         for ii in range(max(0, i - rad), min(n, i + rad + 1))
+                         if (ii + jj) % 2 == (i + j) % 2 and val[jj][ii] is not None]
+                if picks:
+                    out[j][i] = sum(picks) / len(picks)
+                    break
+    return out
 
 
 def fix_alpha_glow(img: Image.Image):
-    img = img.convert("RGBA")
-    w, h = img.size
-    px = img.load()
-    cell = CHECKER_CELL * w / 2048
+    src = img.convert("RGB")
+    spx = src.load()
+    w, h = src.size
+    out, count = fix_alpha(src)
+    px = out.load()
+    n = CHECKER_CELLS
+    cw, ch = w / n, h / n
+    bg = estimate_checker(spx, w, h)
 
-    def expected_bg(x, y):
-        cx, cy = x / cell, y / cell
-        v = CHECKER_LIGHT if (int(cx) + int(cy)) % 2 else CHECKER_DARK
-        # within JPEG ringing distance of a cell edge either shade is plausible
-        near_edge = min(cx % 1, 1 - cx % 1, cy % 1, 1 - cy % 1) * cell < 2.5
-        return v, near_edge
+    # mean brightness of each cell's interior (clear of JPEG edge ringing)
+    mean = [[0.0] * n for _ in range(n)]
+    for j in range(n):
+        for i in range(n):
+            xs = range(int(i * cw) + 4, int((i + 1) * cw) - 4, 2)
+            ys = range(int(j * ch) + 4, int((j + 1) * ch) - 4, 2)
+            s = [sum(spx[x, y]) / 3 for y in ys for x in xs]
+            mean[j][i] = sum(s) / len(s)
 
-    diff = [0] * (w * h)
-    bgv = [0] * (w * h)
-    for y in range(h):
-        for x in range(w):
-            r, g, b, _ = px[x, y]
-            v, near_edge = expected_bg(x, y)
-            d = max(abs(r - v), abs(g - v), abs(b - v))
-            if near_edge:
-                alt = CHECKER_LIGHT + CHECKER_DARK - v
-                d_alt = max(abs(r - alt), abs(g - alt), abs(b - alt))
-                if d_alt < d:
-                    d, v = d_alt, alt
-            diff[y * w + x] = d
-            bgv[y * w + x] = v
-
-    # region = everything reachable from the border (or a big enclosed pocket)
-    # through pixels that are not yet solid art
-    in_region = bytearray(w * h)
-    visited = bytearray(w * h)
-
-    def flood(seeds):
-        comp = []
-        q = deque(seeds)
-        while q:
-            x, y = q.popleft()
-            comp.append(y * w + x)
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                nx, ny = x + dx, y + dy
-                if 0 <= nx < w and 0 <= ny < h:
-                    ni = ny * w + nx
-                    if not visited[ni] and diff[ni] < GLOW_SOLID:
-                        visited[ni] = 1
-                        q.append((nx, ny))
-        return comp
-
-    border = [(x, y) for x in range(w) for y in (0, h - 1)] + [(x, y) for y in range(h) for x in (0, w - 1)]
-    seeds = []
-    for x, y in border:
-        i = y * w + x
-        if not visited[i] and diff[i] < GLOW_SOLID:
-            visited[i] = 1
-            seeds.append((x, y))
-    for i in flood(seeds):
-        in_region[i] = 1
-    for y in range(h):
-        for x in range(w):
-            i = y * w + x
-            if visited[i] or diff[i] >= GLOW_SOLID:
+    # background visibility per cell, from the 3×3 cell window around it:
+    # (light-cell mean − dark-cell mean) / (light bg − dark bg)
+    vis = [[0.0] * n for _ in range(n)]
+    for j in range(n):
+        for i in range(n):
+            hi_m = hi_b = lo_m = lo_b = 0.0
+            hi_n = lo_n = 0
+            window = [(ii, jj) for jj in range(max(0, j - 1), min(n, j + 2)) for ii in range(max(0, i - 1), min(n, i + 2))]
+            mid = (max(bg[jj][ii] for ii, jj in window) + min(bg[jj][ii] for ii, jj in window)) / 2
+            for ii, jj in window:
+                if bg[jj][ii] > mid:
+                    hi_m += mean[jj][ii]; hi_b += bg[jj][ii]; hi_n += 1
+                else:
+                    lo_m += mean[jj][ii]; lo_b += bg[jj][ii]; lo_n += 1
+            if not hi_n or not lo_n:
                 continue
-            visited[i] = 1
-            comp = flood([(x, y)])
-            if len(comp) >= GLOW_POCKET_THRESHOLD:
-                for j in comp:
-                    in_region[j] = 1
+            span = hi_b / hi_n - lo_b / lo_n
+            if span > 8:
+                vis[j][i] = max(0.0, min(1.0, (hi_m / hi_n - lo_m / lo_n) / span))
 
-    count = 0
+    def vis_at(x, y):
+        # bilinear between cell centers so the matte has no blocky seams
+        fx = min(max(x / cw - 0.5, 0), n - 1.001)
+        fy = min(max(y / ch - 0.5, 0), n - 1.001)
+        i0, j0 = int(fx), int(fy)
+        tx, ty = fx - i0, fy - j0
+        top = vis[j0][i0] * (1 - tx) + vis[j0][i0 + 1] * tx
+        bot = vis[j0 + 1][i0] * (1 - tx) + vis[j0 + 1][i0 + 1] * tx
+        return top * (1 - ty) + bot * ty
+
     for y in range(h):
         for x in range(w):
-            i = y * w + x
-            if not in_region[i]:
+            r, g, b, a0 = px[x, y]
+            if a0 == 0:
                 continue
-            d = diff[i]
-            a = 0.0 if d <= GLOW_FLOOR else min(1.0, (d - GLOW_FLOOR) / (GLOW_SOLID - GLOW_FLOOR))
-            if a <= 0:
-                px[x, y] = (0, 0, 0, 0)
+            v = vis_at(x, y)
+            a = 1 - v
+            if a >= HALO_OPAQUE:
+                continue
+            if a <= 0.04:
+                px[x, y] = (r, g, b, 0)
                 count += 1
                 continue
-            v = bgv[i]
-            r, g, b, _ = px[x, y]
+            B = bg[min(n - 1, int(y / ch))][min(n - 1, int(x / cw))]
             # un-composite: pixel = art*a + bg*(1-a)  =>  art = (pixel - bg*(1-a)) / a
-            un = lambda c: max(0, min(255, round((c - v * (1 - a)) / a)))
+            un = lambda c: max(0, min(255, round((c - B * (1 - a)) / a)))
             px[x, y] = (un(r), un(g), un(b), round(a * 255))
-    return img, count
+    return out, count
 
 
 def main():

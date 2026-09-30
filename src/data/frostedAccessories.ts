@@ -40,27 +40,33 @@ export const ANCHOR_FRACTION: Record<string, Record<FrostedShopAnchor, { x: numb
  * visible height rather than the mostly-empty raw canvas height).
  */
 export const ACCESSORY_ART: Record<string, { top: number; bottom: number; cx: number; contentH: number }> = {
-  pet_hat_beanie: { top: 0.192, bottom: 0.782, cx: 0.487, contentH: 0.59 },
-  pet_scarf_pink: { top: 0.256, bottom: 0.781, cx: 0.49, contentH: 0.525 },
-  pet_hat_trapper: { top: 0.257, bottom: 0.78, cx: 0.5, contentH: 0.523 },
   pet_bow_pink: { top: 0.248, bottom: 0.786, cx: 0.492, contentH: 0.538 },
   pet_tiara: { top: 0.271, bottom: 0.682, cx: 0.49, contentH: 0.411 },
-  pet_goggles: { top: 0.327, bottom: 0.692, cx: 0.508, contentH: 0.365 },
   pet_clip_snowflake: { top: 0.228, bottom: 0.784, cx: 0.497, contentH: 0.556 },
+  pet_tiara_blossom: { top: 0.271, bottom: 0.681, cx: 0.491, contentH: 0.409 },
+  pet_tiara_aqua: { top: 0.271, bottom: 0.681, cx: 0.493, contentH: 0.41 },
+  // these three carry a soft glow halo — measured at alpha > 50% so the
+  // faint halo doesn't count as artwork (it would sink them onto the face)
+  pet_tiara_violet: { top: 0.29, bottom: 0.663, cx: 0.501, contentH: 0.373 },
+  pet_wreath_violet: { top: 0.271, bottom: 0.729, cx: 0.5, contentH: 0.458 },
+  pet_bow_starlight: { top: 0.255, bottom: 0.777, cx: 0.489, contentH: 0.522 },
 };
 
 /**
  * A small per-item worn angle (degrees) — a real accessory rarely sits
  * perfectly level/centered, and a slight tilt is what reads as "worn" rather
- * than "stamped on". Symmetric wrap-style items (scarf, goggles) stay level;
- * items with an off-center silhouette (bow, tiara, clip, the hats) get a
- * gentle tilt matching which side their own art leans toward.
+ * than "stamped on". Items with an off-center silhouette get a gentle tilt
+ * matching which side their own art leans toward; the crown-style pieces
+ * share the tiara's -2° so they all sit on the head the same way.
  */
 export const WEARABLE_TILT: Record<string, number> = {
-  pet_hat_beanie: -4,
-  pet_hat_trapper: -3,
   pet_bow_pink: 8,
   pet_tiara: -2,
+  pet_tiara_blossom: -2,
+  pet_tiara_aqua: -2,
+  pet_tiara_violet: -2,
+  pet_wreath_violet: -2,
+  pet_bow_starlight: 6,
   pet_clip_snowflake: 10,
 };
 

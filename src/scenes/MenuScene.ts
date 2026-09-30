@@ -5,7 +5,8 @@ import { confirmModal, settingsModal } from "../ui/Modal";
 import { makeIconButton } from "../ui/hit";
 import { buildCozyBackdrop } from "../world/cozyBackdrop";
 import { safeInsets } from "../util/safeArea";
-import { hasProgress, resetGarden, save } from "../game/services";
+import { hasProgress, isFrostedValleyUnlocked, resetGarden, save } from "../game/services";
+import type { FrostedMenuData } from "./FrostedMenuScene";
 import { audio } from "../audio/AudioManager";
 
 /** The opening storybook screen: title, Continue / Start, Settings. */
@@ -121,7 +122,10 @@ export class MenuScene extends Phaser.Scene {
       () => {
         audio.unlock();
         audio.playSfx("ui_click");
-        this.openFrostedValley("Loading Frosted Valley…");
+        // once unlocked, later visits first offer the valley's own
+        // Continue / Start New Garden; while locked it opens its preview
+        if (isFrostedValleyUnlocked()) this.openValleyMenu();
+        else this.openFrostedValley("Loading Frosted Valley…");
       },
       { hitW: 56, hitH: 56 },
     );
@@ -177,6 +181,18 @@ export class MenuScene extends Phaser.Scene {
       if (this.sys.isActive()) this.input.enabled = true;
     });
     this.scene.launch("FrostedValley");
+  }
+
+  /** Frosted Valley's start screen (FrostedMenuScene) — Continue / Start New Garden — over this menu. */
+  private openValleyMenu(): void {
+    this.input.enabled = false;
+    const data: FrostedMenuData = {
+      onEnter: () => this.openFrostedValley("Loading Frosted Valley…"),
+      onBack: () => {
+        if (this.sys.isActive()) this.input.enabled = true;
+      },
+    };
+    this.scene.launch("FrostedMenu", data);
   }
 
   private relayout(): void {

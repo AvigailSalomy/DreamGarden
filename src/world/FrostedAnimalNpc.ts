@@ -1,4 +1,6 @@
 import Phaser from "phaser";
+import type { FrostedShopItemDef } from "../data/types";
+import { wornAccessoryPose } from "./petAccessoryFit";
 import {
   isPathClear,
   isWalkable,
@@ -131,6 +133,9 @@ export class FrostedAnimalNpc {
   private lastActivity?: Activity;
   private lastPoi?: RoamPoi;
   private pendingGreet = false;
+  /** The Winter Market accessory this animal is wearing, fitted to its live pose every frame. */
+  private accessory?: Phaser.GameObjects.Image;
+  private accessoryItem?: FrostedShopItemDef;
 
   constructor(scene: Phaser.Scene, key: string, x: number, y: number, scale: number, flip: boolean) {
     this.scene = scene;
@@ -172,7 +177,41 @@ export class FrostedAnimalNpc {
   setVisible(v: boolean): this {
     this.sprite.setVisible(v);
     this.lids.setVisible(v);
+    this.accessory?.setVisible(v);
     return this;
+  }
+
+  /**
+   * Puts on (or takes off, with null) a Winter Market pet accessory — the
+   * same fitting as the Shop's TRY IT OUT preview, so it rides every breath,
+   * hop, waddle and turn (see syncAccessory).
+   */
+  setAccessory(item: FrostedShopItemDef | null): void {
+    if (item?.id === this.accessoryItem?.id) return;
+    this.accessory?.destroy();
+    this.accessory = undefined;
+    this.accessoryItem = undefined;
+    if (!item?.anchor) return;
+    this.accessoryItem = item;
+    this.accessory = this.scene.add.image(0, 0, item.textureKey);
+    this.syncAccessory();
+  }
+
+  private syncAccessory(): void {
+    const img = this.accessory;
+    if (!img || !this.accessoryItem) return;
+    const pose = wornAccessoryPose(this.sprite, this.key, this.accessoryItem, this.baseScale);
+    if (!pose) return;
+    img
+      .setPosition(pose.x, pose.y)
+      .setOrigin(pose.originX, pose.originY)
+      .setRotation(pose.rotation)
+      .setScale(pose.scale)
+      .setFlipX(pose.flipX)
+      .setVisible(this.sprite.visible)
+      .setAlpha(this.sprite.alpha);
+    // just above the eyelids, so it always draws over its own animal
+    if (img.depth !== this.sprite.depth + 0.1) img.setDepth(this.sprite.depth + 0.1);
   }
 
   private scheduleBlink(): void {
@@ -486,17 +525,22 @@ export class FrostedAnimalNpc {
   private async slide(): Promise<void> {
     const { area, blocked } = this.roam!;
     const here = { x: this.baseX, y: this.baseY };
+    // lying flat, its body reaches about its own height ahead of its feet —
+    // so the ground has to be clear that much further on, too, or it would
+    // end up sprawled across a neighbouring prop
+    const reach = this.sprite.displayHeight * 0.9;
     let target: Pt | null = null;
-    for (let i = 0; i < 10 && !target; i++) {
-      const p = { x: here.x + (Math.random() < 0.5 ? 1 : -1) * rand(150, 260), y: here.y + rand(-40, 40) };
-      if (isPathClear(here, p, area, blocked)) target = p;
+    for (let i = 0; i < 14 && !target; i++) {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const p = { x: here.x + dir * rand(150, 260), y: here.y + rand(-40, 40) };
+      if (isPathClear(here, { x: p.x + dir * reach, y: p.y }, area, blocked)) target = p;
     }
     if (!target) return this.playSignature(false);
     this.face(target.x > here.x ? 1 : -1);
     await this.wait(260);
     await this.gesture((add, dir, h) => {
       add({ sy: 0.9, sx: 1.06 }, 140, "Quad.easeOut");
-      add({ angle: 62 * dir, ty: -h * 0.04, sy: 1, sx: 1 }, 260, "Quad.easeIn");
+      add({ angle: 55 * dir, ty: -h * 0.04, sy: 1, sx: 1 }, 260, "Quad.easeIn");
     });
     await this.goTo(target, 230, true);
     await this.gesture((add, dir, h) => {
@@ -725,6 +769,7 @@ export class FrostedAnimalNpc {
       this.lids.setDepth(d + 0.05);
     }
     this.drawLids();
+    this.syncAccessory();
   }
 
   private drawLids(): void {
@@ -771,6 +816,7 @@ export class FrostedAnimalNpc {
     this.timers.forEach((t) => t.remove(false));
     this.timers = [];
     this.lids.destroy();
+    this.accessory?.destroy();
     this.sprite.destroy();
   }
 }

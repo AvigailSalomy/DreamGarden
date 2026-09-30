@@ -153,6 +153,12 @@ export class FrostedMazeScene extends Phaser.Scene {
   private deathPos = { x: 0, y: 0 };
   private offFns: Array<() => void> = [];
   private swipeStart: { x: number; y: number } | null = null;
+  /** Direction keys physically held right now, most recent last (screen directions). */
+  private heldKeys: Array<{ key: string; sx: number; sy: number }> = [];
+  /** Bumped every create() — lets tests tell a fresh round from the one it replaced. */
+  private roundId = 0;
+  /** DEV-only: game-clock multiplier for timing-sensitive browser tests (1 in play). */
+  private devTimeScale = 1;
   /** Coins paid out THIS attempt (for the end cards). */
   private coinsThisRun = 0;
 
@@ -193,6 +199,9 @@ export class FrostedMazeScene extends Phaser.Scene {
     this.crystalNodes.clear();
     this.enemyViews.clear();
     this.offFns = [];
+    this.heldKeys = [];
+    this.roundId++;
+    this.devTimeScale = 1;
 
     ensureMazeTextures(this);
 
@@ -228,6 +237,7 @@ export class FrostedMazeScene extends Phaser.Scene {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.onResize, this);
       this.offFns.forEach((f) => f());
       this.offFns = [];
+    this.heldKeys = [];
     });
 
     if (!frostedProgression.isMazeTutorialSeen()) this.showTutorial();
@@ -678,7 +688,7 @@ export class FrostedMazeScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (!this.run) return;
-    const dt = Math.min(delta, 100);
+    const dt = Math.min(delta, 100) * this.devTimeScale;
     if (this.started && !this.paused && !this.ended) {
       for (const e of this.run.tick(dt)) this.onRunEvent(e);
     }
@@ -827,6 +837,7 @@ export class FrostedMazeScene extends Phaser.Scene {
         break;
       case "respawn":
         this.onRespawn(e.lostItems);
+        this.reapplyHeldKey();
         break;
       case "won":
         this.winRound();
@@ -1138,29 +1149,45 @@ export class FrostedMazeScene extends Phaser.Scene {
 
   private bindInput(): void {
     const kb = this.input.keyboard;
+    const map: Record<string, [number, number]> = {
+      ArrowUp: [0, -1],
+      KeyW: [0, -1],
+      ArrowDown: [0, 1],
+      KeyS: [0, 1],
+      ArrowLeft: [-1, 0],
+      KeyA: [-1, 0],
+      ArrowRight: [1, 0],
+      KeyD: [1, 0],
+    };
+    // arrow keys belong to the game while it's open — never scroll the page
+    kb?.addCapture("UP,DOWN,LEFT,RIGHT,SPACE");
+
     kb?.on("keydown", (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (this.overlayKind === "confirm") this.closeOverlay();
         else this.showAbandonConfirm();
         return;
       }
-      const map: Record<string, [number, number]> = {
-        ArrowUp: [0, -1],
-        w: [0, -1],
-        W: [0, -1],
-        ArrowDown: [0, 1],
-        s: [0, 1],
-        S: [0, 1],
-        ArrowLeft: [-1, 0],
-        a: [-1, 0],
-        A: [-1, 0],
-        ArrowRight: [1, 0],
-        d: [1, 0],
-        D: [1, 0],
-      };
-      const m = map[e.key];
-      if (m) this.steer(m[0], m[1]);
+      // e.code, not e.key: layout-independent, and caps-lock/shift can't turn "d" into "D"
+      const m = map[e.code];
+      if (!m) return;
+      this.heldKeys = this.heldKeys.filter((h) => h.key !== e.code);
+      this.heldKeys.push({ key: e.code, sx: m[0], sy: m[1] });
+      this.steer(m[0], m[1], true);
     });
+    kb?.on("keyup", (e: KeyboardEvent) => {
+      const m = map[e.code];
+      if (!m) return;
+      this.heldKeys = this.heldKeys.filter((h) => h.key !== e.code);
+      this.run.releaseWantDir(this.screenToLayoutDir(m[0], m[1]));
+    });
+    // alt-tab mid-press: the keyup never arrives, so treat everything as released
+    const onBlur = () => {
+      this.heldKeys = [];
+      this.run?.releaseAllWantDirs();
+    };
+    this.game.events.on(Phaser.Core.Events.BLUR, onBlur);
+    this.offFns.push(() => this.game.events.off(Phaser.Core.Events.BLUR, onBlur));
 
     // swipe anywhere on touch screens
     this.input.on("pointerdown", (p: Phaser.Input.Pointer) => {
@@ -1177,9 +1204,21 @@ export class FrostedMazeScene extends Phaser.Scene {
     });
   }
 
-  private steer(sx: number, sy: number): void {
-    if (!this.started || this.paused || this.ended) return;
-    this.run.setWantDir(this.screenToLayoutDir(sx, sy));
+  /**
+   * Steer the player. Accepted whenever no card is up and the run isn't
+   * over — including during READY?/GO (the sim isn't ticking yet, so the
+   * direction simply waits for GO) and during the death sequence. `held`
+   * = the key is still down (see MazeRun.setWantDir).
+   */
+  private steer(sx: number, sy: number, held = false): void {
+    if (this.ended || this.paused || this.overlayKind) return;
+    this.run.setWantDir(this.screenToLayoutDir(sx, sy), held);
+  }
+
+  /** After a respawn resets the player's direction, a key still held down keeps steering. */
+  private reapplyHeldKey(): void {
+    const h = this.heldKeys[this.heldKeys.length - 1];
+    if (h) this.steer(h.sx, h.sy, true);
   }
 
   private buildTouchControls(): void {
@@ -1421,7 +1460,59 @@ export class FrostedMazeScene extends Phaser.Scene {
         coins: this.run.coins.size,
         wallet: economy.coins,
         overlay: this.overlayKind,
+        player: {
+          cell: this.run.player.cell,
+          next: this.run.player.next,
+          t: this.run.player.t,
+          dir: this.run.player.dir,
+          wantDir: this.run.player.wantDir,
+          pos: this.run.playerPos(),
+        },
+        keydownListeners: this.input.keyboard?.listenerCount("keydown") ?? 0,
+        round: this.roundId,
+        paused: this.paused,
+        ended: this.ended,
       }),
+      /** Layout + orientation, so input tests can find corridors and junctions. */
+      layout: () => ({ rows: this.layout.rows, transposed: this.transposed, start: this.run.grid.start }),
+      /** Input tests: put every enemy to sleep for good and make the player untouchable. */
+      calm: () => {
+        for (const e of this.run.enemies) {
+          e.mode = "sleeping";
+          e.modeTimerMs = Number.MAX_SAFE_INTEGER;
+          e.next = null;
+        }
+        this.run.protectMs = Number.MAX_SAFE_INTEGER;
+      },
+      /** Input tests: wake one enemy on (row, col), hunting at normal speed — the player stays untouchable. */
+      chaseFrom: (row: number, col: number) => {
+        const e = this.run.enemies[0];
+        if (!e) return;
+        e.mode = "active";
+        e.cell = { row, col };
+        e.next = null;
+        e.t = 0;
+        e.lastDir = null;
+        this.run.protectMs = Number.MAX_SAFE_INTEGER;
+      },
+      /**
+       * Input tests: run the game clock slower (e.g. 0.25), so machine lag
+       * between a test's position check and its real key press is a tiny
+       * fraction of a tile. Movement rules are all measured in tiles, so
+       * this changes timing precision only, never behaviour. Resets per round.
+       */
+      timeScale: (k: number) => {
+        this.devTimeScale = k;
+      },
+      /** Input tests: stand the player still on a tile with no pending direction. */
+      place: (row: number, col: number) => {
+        const p = this.run.player;
+        p.cell = { row, col };
+        p.next = null;
+        p.t = 0;
+        p.dir = null;
+        p.wantDir = null;
+      },
       collectNext: () => {
         const cell = [...this.run.items.values()][0];
         if (cell) stepOnto(cell);

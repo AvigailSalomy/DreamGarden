@@ -57,6 +57,29 @@ export function resetGarden(): void {
   save.reset();
 }
 
+/** Frosted Valley's counterpart of hasProgress(): has this valley been played at all? */
+export function hasFrostedProgress(): boolean {
+  const fv = save.state.frostedValley;
+  const shop = save.state.frostedShop;
+  // the valley creates a blank entry per animal the moment it's entered, so
+  // only count what the player actually did with them
+  const played = Object.values(fv.animals).some(
+    (a) => a.rescued || a.letterSeen || Object.values(a.resources).some((r) => r.current > 0 || r.restored),
+  );
+  return (
+    fv.currentAnimalIndex > 0 ||
+    played ||
+    Object.keys(fv.storyNotesSeen ?? {}).length > 0 ||
+    shop.placements.length > 0 ||
+    Object.keys(shop.petOwned).length > 0
+  );
+}
+
+/** Frosted Valley's "Start New Garden" — see SaveService.resetFrostedValley for exactly what it keeps. */
+export function resetFrostedValley(): void {
+  save.resetFrostedValley();
+}
+
 /** Persist on the way out — presentation may be mid-animation, truth is already safe. */
 if (typeof window !== "undefined") {
   const flush = () => save.saveNow();

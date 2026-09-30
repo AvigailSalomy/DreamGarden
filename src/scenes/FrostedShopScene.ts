@@ -3,14 +3,14 @@ import { attachHit } from "../ui/hit";
 import { makePanel, makePill } from "../ui/Panel";
 import { titleStyle, bodyStyle, COLORS } from "../ui/theme";
 import { FROSTED_SHOP_CATALOG, FROSTED_SHOP_CATEGORIES } from "../data/frostedShop";
-import type { FrostedAnimalDef, FrostedShopAnchor, FrostedShopCategory, FrostedShopItemDef } from "../data/types";
+import type { FrostedAnimalDef, FrostedShopCategory, FrostedShopItemDef } from "../data/types";
 import { frostedShop, frostedProgression, economy } from "../game/services";
 import { SHOP_TUTORIAL, shouldShowNote } from "../data/frostedStory";
 import { showNote } from "../story/StoryNotes";
 import type { FrostedValleyScene } from "./FrostedValleyScene";
 import { Sfx } from "../fx/Sfx";
 import { sparkleBurst } from "../fx/Particles";
-import { ANCHOR_FRACTION, ACCESSORY_ART, WEARABLE_TILT, accessoryOriginY } from "../data/frostedAccessories";
+import { wornAccessoryPose } from "../world/petAccessoryFit";
 
 const CARD_W = 158;
 const CARD_H = 196;
@@ -46,9 +46,13 @@ export class FrostedShopScene extends Phaser.Scene {
   private previewSprite?: Phaser.GameObjects.Image;
   private previewAccessory?: Phaser.GameObjects.Image;
   private previewAccessoryShadow?: Phaser.GameObjects.Ellipse;
-  private previewAccessoryH = 0;
-  private selectedAccessoryAnchor: FrostedShopAnchor | null = null;
-  private previewShadowDy = 0;
+  private previewAccessoryItem?: FrostedShopItemDef;
+  /** The entrance pop multiplies the fitted scale; kept separate so the per-frame fit never fights the tween. */
+  private previewPop = { k: 1 };
+  /** The preview animal's fixed display height — every animal is fitted to it, never to a mid-breath height. */
+  private previewAnimalH = 0;
+  /** The preview sprite's un-animated scale (its breathing tween oscillates scaleY above this). */
+  private previewBaseScale = 1;
   private selectedPetItem: string | null = null;
   private previewNameText?: Phaser.GameObjects.Text;
   private previewPriceText?: Phaser.GameObjects.Text;
@@ -62,14 +66,16 @@ export class FrostedShopScene extends Phaser.Scene {
     super("FrostedShop");
   }
 
-  create(): void {
+  create(data?: { tab?: FrostedShopCategory; previewAnimal?: string }): void {
     this.registry.set("pointerOnUI", true);
-    this.activeTab = "pet";
+    // the story's guided first visit can pick the tab and which friend is dressed up
+    this.activeTab = data?.tab ?? "pet";
     this.cardHighlights.clear();
     this.tabButtons = [];
-    // only genuinely unlocked animals can be previewed; default to the newest one
+    // only genuinely unlocked animals can be previewed; a guided visit picks
+    // the friend to dress, otherwise default to the newest one
     const unlockedNow = frostedProgression.unlockedAnimals();
-    this.previewAnimalId = unlockedNow[unlockedNow.length - 1]?.id ?? "";
+    this.previewAnimalId = data?.previewAnimal ?? unlockedNow[unlockedNow.length - 1]?.id ?? "";
 
     const w = this.scale.width;
     const h = this.scale.height;
@@ -419,7 +425,9 @@ export class FrostedShopScene extends Phaser.Scene {
     root.add(this.previewRoot);
 
     this.previewSprite = this.add.image(0, 0, this.previewAnimalId).setOrigin(0.5, 1);
+    this.previewAnimalH = animalH;
     const scale = animalH / (this.previewSprite.height || animalH);
+    this.previewBaseScale = scale;
     this.previewSprite.setScale(scale);
     this.previewRoot.add(this.previewSprite);
     this.startPreviewIdle();
@@ -438,7 +446,8 @@ export class FrostedShopScene extends Phaser.Scene {
     root.add([this.previewNameText, this.previewPriceText]);
 
     this.previewBuyBg = this.add.graphics();
-    const buyY = animalTop + animalH + 118;
+    // clear of the price line above it ("Owned — tap to equip" was tucked under the button)
+    const buyY = animalTop + animalH + 140;
     const buyW = PREVIEW_W - 60;
     const buyH = 44;
     this.previewBuyBg.fillStyle(COLORS.gold, 1);
@@ -499,10 +508,13 @@ export class FrostedShopScene extends Phaser.Scene {
     if (!frostedProgression.isRescued(animalId)) return;
     Sfx.tap();
     this.previewAnimalId = animalId;
-    const priorHeight = Math.abs(this.previewSprite.displayHeight);
     this.previewSprite.destroy();
     this.previewSprite = this.add.image(0, 0, animalId).setOrigin(0.5, 1);
-    const scale = priorHeight / (this.previewSprite.height || priorHeight);
+    // fitted to the fixed preview height — NOT the old sprite's displayHeight,
+    // which includes wherever its breathing was mid-tween (up to +4.5%), so
+    // repeated switching used to ratchet the animals' size up
+    const scale = this.previewAnimalH / (this.previewSprite.height || this.previewAnimalH);
+    this.previewBaseScale = scale;
     this.previewSprite.setScale(scale);
     this.previewRoot.addAt(this.previewSprite, 0);
     // only the breathing tween needs restarting on the fresh sprite — the
@@ -596,78 +608,57 @@ export class FrostedShopScene extends Phaser.Scene {
     this.previewAccessory = undefined;
     this.previewAccessoryShadow?.destroy();
     this.previewAccessoryShadow = undefined;
-    this.selectedAccessoryAnchor = null;
+    this.previewAccessoryItem = undefined;
     if (!itemId || !this.previewSprite || !this.previewRoot) return;
     const item = frostedShop.def(itemId);
     if (!item || !item.anchor) return;
-    this.selectedAccessoryAnchor = item.anchor;
 
-    const spriteH = Math.abs(this.previewSprite.displayHeight);
-    const spriteW = this.previewSprite.displayWidth;
-    const frac = (ANCHOR_FRACTION[this.previewAnimalId] ?? ANCHOR_FRACTION.fv_rabbit)[item.anchor];
-    const localX = -spriteW / 2 + frac.x * spriteW;
-    const localY = -spriteH + frac.y * spriteH;
-
-    const art = ACCESSORY_ART[item.id];
-    const img = this.add.image(localX, localY, item.textureKey);
-    if (art) img.setOrigin(art.cx, accessoryOriginY(item.anchor, art));
-    else img.setOrigin(0.5, item.anchor === "head" ? 1 : item.anchor === "neck" ? 0 : 0.5);
-    // previewScale is the accessory's own VISIBLE height as a fraction of the
-    // animal's height (not the raw padded canvas) — a hat should read as
-    // "about a quarter of the animal tall", not "68% of a mostly-empty PNG".
-    const targetVisibleH = spriteH * (item.previewScale ?? 0.25);
-    const rawContentH = (art?.contentH ?? 0.5) * (img.height || 1);
-    const scale = targetVisibleH / (rawContentH || targetVisibleH);
-    img.setScale(scale);
-    // a worn item sits at a small, item-specific angle rather than dead
-    // center/level — a hard-edged "stamped on" cue disappears once it reads
-    // as slightly askew, the way a real worn accessory would.
-    img.setAngle(WEARABLE_TILT[item.id] ?? 0);
-    img.setDepth(5);
-    img.setAlpha(0);
-
+    // placed (and then re-fitted every frame in update()) by the shared
+    // fitting the world animals use too — see petAccessoryFit
+    const img = this.add.image(0, 0, item.textureKey).setDepth(5).setAlpha(0);
     // a soft contact shadow UNDER the accessory, on the fur — the single
     // biggest cue that grounds a flat cutout against the body instead of
     // reading as a sticker floating in front of it.
-    const shadowW = targetVisibleH * 0.9;
-    this.previewShadowDy = item.anchor === "neck" ? targetVisibleH * 0.08 : item.anchor === "collar" ? targetVisibleH * 0.1 : targetVisibleH * 0.22;
-    const shadow = this.add
-      .ellipse(localX, localY + this.previewShadowDy, shadowW, shadowW * 0.32, 0x2b1a12, 0.22)
-      .setDepth(4);
+    const shadow = this.add.ellipse(0, 0, 10, 10, 0x2b1a12, 0.22).setDepth(4).setAlpha(0);
     this.previewRoot.add(shadow);
     this.previewRoot.add(img);
+    this.previewAccessory = img;
     this.previewAccessoryShadow = shadow;
-    shadow.setAlpha(0);
-    this.tweens.add({ targets: shadow, alpha: 0.22, duration: 200 });
+    this.previewAccessoryItem = item;
+    this.syncPreviewAccessory();
 
+    this.tweens.add({ targets: shadow, alpha: 0.22, duration: 200 });
     // alpha fades in once and stays — kept as its own tween so it's never
     // caught by the scale-pop's yoyo (a single tween's yoyo reverses EVERY
     // property it targets, which previously also yoyoed alpha back to 0)
     this.tweens.add({ targets: img, alpha: 1, duration: 160 });
-    this.tweens.add({ targets: img, scale: scale * 1.1, duration: 160, ease: "Back.easeOut", onComplete: () => this.tweens.add({ targets: img, scale, duration: 160 }) });
-    this.previewAccessory = img;
-    this.previewAccessoryH = targetVisibleH;
-    void this.previewAccessoryH;
+    this.tweens.killTweensOf(this.previewPop);
+    this.previewPop.k = 1;
+    this.tweens.add({ targets: this.previewPop, k: 1.1, duration: 160, ease: "Back.easeOut", yoyo: true });
   }
 
-  /**
-   * The preview animal breathes (its sprite scaleY pulses), which moves the
-   * head and neck upward relative to the fixed bottom. Re-derive the worn
-   * accessory's anchor from the sprite's CURRENT height every frame so it
-   * stays glued to the same spot of the body instead of drifting (sway and
-   * hop already move both, since they share one container).
-   */
   update(): void {
-    const acc = this.previewAccessory;
-    const sprite = this.previewSprite;
-    if (!acc || !sprite || !this.selectedAccessoryAnchor) return;
-    const spriteH = Math.abs(sprite.displayHeight);
-    const spriteW = sprite.displayWidth;
-    const frac = (ANCHOR_FRACTION[this.previewAnimalId] ?? ANCHOR_FRACTION.fv_rabbit)[this.selectedAccessoryAnchor];
-    const x = -spriteW / 2 + frac.x * spriteW;
-    const y = -spriteH + frac.y * spriteH;
-    acc.setPosition(x, y);
-    if (this.previewAccessoryShadow) this.previewAccessoryShadow.setPosition(x, y + this.previewShadowDy);
+    this.syncPreviewAccessory();
+  }
+
+  /** Keeps the worn accessory on the head through the breathing tween (which scales only the sprite). */
+  private syncPreviewAccessory(): void {
+    const img = this.previewAccessory;
+    const item = this.previewAccessoryItem;
+    if (!img || !item || !this.previewSprite?.active) return;
+    const pose = wornAccessoryPose(this.previewSprite, this.previewAnimalId, item, this.previewBaseScale);
+    if (!pose) return;
+    img
+      .setPosition(pose.x, pose.y)
+      .setOrigin(pose.originX, pose.originY)
+      .setRotation(pose.rotation)
+      .setScale(pose.scale * this.previewPop.k)
+      .setFlipX(pose.flipX);
+    const shadow = this.previewAccessoryShadow;
+    if (!shadow) return;
+    const shadowW = pose.visibleH * 0.9;
+    if (shadow.width !== shadowW) shadow.setSize(shadowW, shadowW * 0.32);
+    shadow.setPosition(pose.x, pose.y + pose.visibleH * (item.anchor === "neck" ? 0.08 : item.anchor === "collar" ? 0.1 : 0.22));
   }
 
   private close(): void {

@@ -193,4 +193,15 @@ export class SaveService {
     this.state = { ...freshSave(), frostedValley, frostedShop };
     this.saveNow();
   }
+
+  /** Frosted Valley's own "Start New Garden" — the mirror of reset(): wipes
+   *  that world's progression (animals, resources, maze deck, story notes)
+   *  and its Winter Market state (placed decorations, owned/equipped pet
+   *  accessories), but NEVER Dream Garden or the shared coin wallet. The
+   *  valley stays open: its lock is Dream Garden's completion, untouched here. */
+  resetFrostedValley(): void {
+    this.state.frostedValley = freshFrostedValley();
+    this.state.frostedShop = freshFrostedShop();
+    this.saveNow();
+  }
 }

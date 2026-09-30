@@ -487,7 +487,7 @@ export class FrostedNoteScene extends Phaser.Scene {
     env.setInteractive(new Phaser.Geom.Rectangle(0, 0, envW, envH), Phaser.Geom.Rectangle.Contains);
     env.on("pointerup", () => this.open());
     // don't make anyone wait: it opens by itself after a beat
-    this.time.delayedCall(1150, () => this.open());
+    this.time.delayedCall(750, () => this.open());
   }
 
   private open(): void {

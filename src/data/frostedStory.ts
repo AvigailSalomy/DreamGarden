@@ -452,31 +452,49 @@ export const PUZZLE_TUTORIAL: StoryNoteDef = {
 };
 
 /**
- * The Winter Market introduction. Shown right after the Rabbit is a real,
- * active animal — the Rabbit is what makes the market's TRY IT OUT useful, so
- * this is the natural moment to say "there's a shop now" and walk the player
- * in. Then, once inside, a short how-it-works tutorial.
+ * First Shop visit — once, right after the Rabbit is back (between the
+ * Rabbit chapter and the Fox's). The rescue reward (+100) plus the maze coins
+ * always cover a first purchase: accessories start at 25, decorations at 35.
  */
 export const SHOP_INTRO: StoryNoteDef = {
   id: "shop_intro_seen",
   kind: "story",
-  title: "🛍️ The Winter Market is open!",
-  body: "Your bunny is home, and the little market in the village has opened its doors.\n\nDress your friends up and decorate the valley with your coins!",
-  button: "Take me there",
+  title: "🪙 You earned some coins!",
+  body: "Every coin from the maze — and the bunny's thank-you gift — is yours to spend.\n\nLet's visit the Winter Market and find something special!",
+  button: "Visit the Shop",
   once: true,
 };
 
 export const SHOP_TUTORIAL: StoryNoteDef = {
   id: "shop_tutorial_seen",
   kind: "tutorial",
-  title: "🪙 How the Market works",
-  body: "Spend your coins here. Only things you can afford are ready to use.\n\n🏠 Buildings, plants & decorations: press a card and drag it into the valley, then let go to place it.\n\n🐾 TRY IT OUT: tap an accessory to see it on your friend. It's free until you press BUY.",
-  button: "Got it",
+  title: "🎀 Treat your new friend!",
+  body: "Tap an accessory to see it on the bunny in TRY IT OUT,\nthen press Buy. Each card shows its price in 🪙 coins —\nanything you can afford is ready to buy.\n\nPlants and decorations can be dragged into the valley.",
+  button: "Let's shop!",
   once: true,
 };
 
+export const SHOP_THANKS: StoryNoteDef = {
+  id: "shop_first_purchase",
+  kind: "celebration",
+  title: "🎀 What a lovely gift!",
+  body: "",
+  durationMs: 1900,
+  once: false,
+};
+
+/** When the first Shop visit ends: the story points on to the next friend. */
 /** Shown when the market is tapped before the first friend is home. */
 export const SHOP_LOCKED_HINT = "The market opens once your first friend is home";
+
+export const SHOP_DONE: StoryNoteDef = {
+  id: "shop_done_seen",
+  kind: "story",
+  title: "🛍️ Come back anytime!",
+  body: "The Winter Market is always open —\njust tap it whenever you have coins to spend.\n\nNow, someone else in the valley needs you...",
+  button: "Who is it?",
+  once: true,
+};
 
 /** Caption over the finished puzzle as the living-artwork beat begins. */
 export const LIVING_ART_CAPTION = "✨ The picture is coming to life...";

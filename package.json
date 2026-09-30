@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e:server": "vite --config e2e/vite.e2e.config.ts",
+    "test:e2e": "node e2e/frostedMazeInput.e2e.mjs",
+    "test:e2e:turns": "node e2e/frostedMazeTurns.e2e.mjs"
   },
   "dependencies": {
     "@fontsource/baloo-2": "5.2.5",
@@ -18,6 +21,7 @@
   },
   "devDependencies": {
     "jsdom": "25.0.1",
+    "playwright": "^1.63.0",
     "typescript": "5.6.3",
     "vite": "6.0.11",
     "vitest": "2.1.9"

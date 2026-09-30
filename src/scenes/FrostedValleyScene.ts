@@ -16,7 +16,6 @@ import { NATIVE_FACING, PERSONALITIES, areaAt, type Pt } from "../world/animalBe
 import { FROSTED_ROAM } from "../data/frostedRoam";
 import { FrostedStoryDirector } from "../story/FrostedStoryDirector";
 import { SHOP_LOCKED_HINT, storyFor } from "../data/frostedStory";
-import { FrostedAccessoryRig } from "../world/FrostedAccessoryRig";
 
 /**
  * Frosted Valley — a second, larger world built from the supplied production
@@ -368,7 +367,6 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.zoneItems = {};
     this.hintBusy = false;
     this.shopPlacementSprites.clear();
-    this.wornRigs.clear();
     this.placementMenu = undefined;
     this.placementController = new FrostedPlacementController(this);
 
@@ -388,11 +386,12 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.buildFrozenShore();
     this.buildGlade();
     this.buildAnimals();
+    this.dressZoneAnimals();
+    // the Shop pauses the valley and resumes it on close — re-dress then, so
+    // a just-bought/equipped accessory is already on the animal in the world
+    this.events.on(Phaser.Scenes.Events.RESUME, this.dressZoneAnimals, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, this.dressZoneAnimals, this));
     this.renderShopPlacements();
-    this.syncWornAccessories();
-    // the Shop just closed (or any overlay did): show whatever the animals are wearing now
-    this.events.on(Phaser.Scenes.Events.RESUME, this.syncWornAccessories, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.events.off(Phaser.Scenes.Events.RESUME, this.syncWornAccessories, this));
     this.buildForeground();
     this.buildSnowfall();
 
@@ -414,8 +413,13 @@ export class FrostedValleyScene extends Phaser.Scene {
       triggerRestore: (animalId, resourceId) => this.triggerRestore(animalId, resourceId),
       openPuzzle: (animalId) => this.openPuzzle(animalId),
       showHint: (x, y, message) => this.showHint(x, y, message),
-      guideToShop: () => this.guideToShop(),
       bringIntoView: (area, companion) => this.bringIntoView(area, companion),
+      frame: (objs, fill, minZoom, maxZoom) => this.frameObjects(objs, fill, minZoom, maxZoom),
+      frameRect: (r, fill, minZoom, maxZoom) => this.frameBounds(r, fill, minZoom, maxZoom),
+      shopBounds: () =>
+        new Phaser.Geom.Rectangle(this.shopPos.x - this.shopPos.radius * 0.8, this.shopPos.y - this.shopPos.radius * 1.3, this.shopPos.radius * 1.6, this.shopPos.radius * 1.4),
+      openShop: (tab, previewAnimal) => this.openShop(tab, previewAnimal),
+      isPlacing: () => !!this.placementController?.active,
     });
     // NOT widened yet here — the opening reveal's frameWide() establishing
     // shot uses this same minZoom, so widening it before the reveal plays
@@ -1208,7 +1212,7 @@ export class FrostedValleyScene extends Phaser.Scene {
    * for the duration, and the caller already closed the Request note before
    * calling this — so nothing else can be interacted with mid-cinematic.
    */
-  private async restoreWorldItem(animalId: string, resourceId: string): Promise<void> {
+  private async restoreWorldItem(animalId: string, resourceId: string, returnCamera = true): Promise<void> {
     const rec = this.findItemPair(animalId, resourceId);
     if (!rec) return;
 
@@ -1226,14 +1230,18 @@ export class FrostedValleyScene extends Phaser.Scene {
     // clamping the PRIOR zoom as a floor meant a wide-zoomed-out player saw
     // almost no camera move at all, leaving the requirement small and
     // off-center instead of the star of the moment).
-    const closeZoom = 1.05;
-    await this.camera.focusOn(rec.damaged.x, rec.damaged.y - 30, 950, closeZoom);
+    //
+    // Framed from the object's REAL bounds (damaged ∪ restored art, whose
+    // origin is at its feet): centring on `damaged.y` used to put the base
+    // of a tall object at mid-screen, pushing e.g. the Well half off the top.
+    const shot = this.boundsOf([rec.damaged, rec.restored]);
+    await this.frameBounds(shot, 0.6, 0.5, 1.15);
     await wait(this, 100);
 
     // ---- B: 1.0-2.0s — glow gathers, light builds ----
     Sfx.whoosh();
-    const glow = await gatherGlow(this, rec.damaged.x, rec.damaged.y - 20, 650, tint);
-    sparkleBurst(this, rec.damaged.x, rec.damaged.y - 10, 6, 36, tint);
+    const glow = await gatherGlow(this, shot.centerX, shot.centerY, 650, tint);
+    sparkleBurst(this, shot.centerX, shot.centerY, 6, 36, tint);
     await wait(this, 350);
 
     // ---- C: 2.0-4.0s — the actual transformation, flavor-specific ----
@@ -1241,7 +1249,7 @@ export class FrostedValleyScene extends Phaser.Scene {
 
     // ---- D: 4.0-5.3s — emphasized reveal of the restored object ----
     Sfx.sparkle();
-    const revealGlow = await gatherGlow(this, rec.restored.x, rec.restored.y - 30, 420, tint);
+    const revealGlow = await gatherGlow(this, shot.centerX, shot.centerY, 420, tint);
     this.tweens.add({
       targets: rec.restored,
       scaleY: rec.restored.scaleY * 1.1,
@@ -1250,23 +1258,48 @@ export class FrostedValleyScene extends Phaser.Scene {
       yoyo: true,
       ease: "Sine.easeOut",
     });
-    sparkleBurst(this, rec.restored.x, rec.restored.y - 50, 14, 55, tint);
+    sparkleBurst(this, shot.centerX, shot.centerY, 14, 55, tint);
     await wait(this, 480);
     this.tweens.add({ targets: revealGlow, alpha: 0, scale: 1.4, duration: 300, onComplete: () => revealGlow.destroy() });
 
     // ---- E: 5.3-6.0s — finishing burst, brief hold ----
     Sfx.fanfare();
-    sparkleBurst(this, rec.restored.x, rec.restored.y - 40, 30, 75);
+    sparkleBurst(this, shot.centerX, shot.centerY, 30, 75);
     this.tweens.add({ targets: glow, alpha: 0, scale: 1.5, duration: 380, onComplete: () => glow.destroy() });
     await wait(this, 420);
 
     // a subtle "it's alive" idle flourish that stays forever, per resource flavor
     this.startRestoredIdle(flavor, rec.restored);
 
-    // camera returns to exactly where the player left it — never stays parked at the close-up
-    await this.camera.focusOn(prevMid.x, prevMid.y, 650, prevZoom);
+    // camera returns to exactly where the player left it — never stays parked at the
+    // close-up — unless the story is about to frame the next objective itself
+    if (returnCamera) await this.camera.focusOn(prevMid.x, prevMid.y, 650, prevZoom);
     this.camera.enable();
     this.flowBusy = false;
+  }
+
+  /** World-space union bounds of some images (restored art may be taller than the damaged one). */
+  private boundsOf(objs: Phaser.GameObjects.Image[]): Phaser.Geom.Rectangle {
+    const r = objs[0].getBounds();
+    for (const o of objs.slice(1)) Phaser.Geom.Rectangle.Union(r, o.getBounds(), r);
+    return r;
+  }
+
+  /**
+   * Centre the camera on a world rectangle, zoomed so it fills `fill` of the
+   * screen (clamped). Borrows the camera like every other cinematic.
+   */
+  private async frameBounds(b: Phaser.Geom.Rectangle, fill: number, minZoom: number, maxZoom: number): Promise<void> {
+    const cam = this.cameras.main;
+    const zoom = Phaser.Math.Clamp(Math.min((cam.height * fill) / b.height, (cam.width * fill) / b.width), minZoom, maxZoom);
+    const wasEnabled = !this.flowBusy;
+    this.camera.disable();
+    await this.camera.focusOn(b.centerX, b.centerY, 900, zoom);
+    if (wasEnabled) this.camera.enable();
+  }
+
+  private frameObjects(objs: Phaser.GameObjects.Image[], fill: number, minZoom: number, maxZoom: number): Promise<void> {
+    return this.frameBounds(this.boundsOf(objs), fill, minZoom, maxZoom);
   }
 
   /**
@@ -1360,11 +1393,10 @@ export class FrostedValleyScene extends Phaser.Scene {
     // guided chapters: a short "all collected!" note first (the cinematic itself stays text-free)
     if (this.story.handles(animalId)) await this.story.celebrate(animalId, resourceId);
     if (!frostedProgression.restoreResource(animalId, resourceId)) return;
-    await this.restoreWorldItem(animalId, resourceId);
+    await this.restoreWorldItem(animalId, resourceId, !this.story.handles(animalId));
     if (frostedProgression.isPuzzleAvailable(animalId)) this.refreshAnimalBadge(animalId);
     if (this.story.handles(animalId)) {
-      // next requirement lights up, or the "all restored → puzzle" note
-      await wait(this, 400);
+      // the next requirement is introduced right away (or the "all restored → puzzle" note)
       await this.story.afterRestore(animalId);
       return;
     }
@@ -1420,10 +1452,9 @@ export class FrostedValleyScene extends Phaser.Scene {
     const next = frostedProgression.currentAnimal;
     if (!next) return;
     const storyDriven = this.story.handles(next.id);
-    if (storyDriven ? frostedProgression.isStoryNoteSeen(storyFor(next.id)!.intro.id) : frostedProgression.isLetterSeen(next.id)) {
-      if (storyDriven) this.story.refreshHighlight();
-      return;
-    }
+    // story-driven chapters always hand off to the director, which frames the
+    // animal and then guides to its next step whether or not the intro was seen
+    if (!storyDriven && frostedProgression.isLetterSeen(next.id)) return;
     const nextZoneKey = ANIMAL_TO_ZONE[next.id];
     const nextPos = nextZoneKey ? ZONES[nextZoneKey] : null;
     if (nextPos) {
@@ -1685,23 +1716,6 @@ export class FrostedValleyScene extends Phaser.Scene {
   }
 
   /** Every previously-placed Shop decoration, rebuilt fresh on load — see FrostedShopService. */
-  private wornRigs = new Map<string, FrostedAccessoryRig>();
-
-  /** Make every unlocked animal in the valley wear exactly what the Shop says it's equipped with. */
-  private syncWornAccessories(): void {
-    for (const rec of Object.values(this.zoneAnimals) as ZoneAnimalRec[]) {
-      if (!rec.npc || !rec.animalId) continue;
-      const id = frostedShop.equippedFor(rec.animalId);
-      const cur = this.wornRigs.get(rec.animalId);
-      if (cur && cur.itemId === id) continue;
-      cur?.destroy();
-      this.wornRigs.delete(rec.animalId);
-      const def = id ? frostedShop.def(id) : undefined;
-      if (!def) continue;
-      this.wornRigs.set(rec.animalId, new FrostedAccessoryRig(this, rec.npc.sprite, rec.animalId, def));
-    }
-  }
-
   private renderShopPlacements(): void {
     for (const p of frostedShop.listPlacements()) this.spawnPlacementSprite(p);
   }
@@ -2015,6 +2029,15 @@ export class FrostedValleyScene extends Phaser.Scene {
   }
 
   /* ================= animals — hidden as silhouettes until rescued ================= */
+
+  /** Puts each met animal's equipped Winter Market accessory on it (or takes it off). */
+  private dressZoneAnimals(): void {
+    for (const rec of Object.values(this.zoneAnimals)) {
+      if (!rec?.npc) continue;
+      const itemId = frostedShop.equippedFor(rec.animalId);
+      rec.npc.setAccessory((itemId && frostedShop.def(itemId)) || null);
+    }
+  }
 
   private buildAnimals(): void {
     // stands right beside the carrots bed at the yard's center-left — the
@@ -2453,25 +2476,9 @@ export class FrostedValleyScene extends Phaser.Scene {
     this.scene.launch("FrostedRequest", { animalId });
   }
 
-  private openShop(): void {
+  private openShop(tab?: string, previewAnimal?: string): void {
     this.scene.pause();
-    this.scene.launch("FrostedShop");
-  }
-
-  /**
-   * The Shop introduction's "Take me there": pan to the Winter Market, open
-   * it, and hand control back once the player closes it again.
-   */
-  async guideToShop(): Promise<void> {
-    this.flowBusy = true;
-    this.camera.disable();
-    await this.camera.focusOn(this.shopPos.x, this.shopPos.y - this.shopPos.radius * 0.5, 1200, SETTLE_ZOOM);
-    await wait(this, 350);
-    const closed = new Promise<void>((resolve) => this.events.once(Phaser.Scenes.Events.RESUME, () => resolve()));
-    this.openShop();
-    await closed;
-    this.camera.enable();
-    this.flowBusy = false;
+    this.scene.launch("FrostedShop", tab || previewAnimal ? { tab, previewAnimal } : undefined);
   }
 
   /**
@@ -2745,6 +2752,7 @@ export class FrostedValleyScene extends Phaser.Scene {
     inner.destroy();
     rec.sprite = npc.sprite;
     rec.npc = npc;
+    this.dressZoneAnimals();
     this.tweens.add({ targets: halo, scale: haloScale * 1.6, alpha: 0, duration: 1100, ease: "Sine.easeOut", onComplete: () => halo.destroy() });
     const ring = this.add.circle(cx, cy, h * 0.3).setStrokeStyle(10, 0xffffff, 0.9).setDepth(9000);
     this.tweens.add({ targets: ring, radius: h * 1.5, alpha: 0, duration: 800, ease: "Cubic.easeOut", onComplete: () => ring.destroy() });
@@ -2793,10 +2801,9 @@ export class FrostedValleyScene extends Phaser.Scene {
 
     this.camera.enable();
     this.flowBusy = false;
+    // (for the Rabbit this also runs the one-time Winter Market introduction,
+    // BEFORE moving on to the Fox's letter)
     await this.story.afterUnlock(animalId);
-    // the Rabbit is now a real animal in the valley: introduce the Winter Market
-    // (envelope -> shop tutorial) BEFORE moving on to the Fox's letter
-    if (animalId === "fv_rabbit") await this.story.shopIntro();
     await this.showNextAnimalLetterIfAny();
   }
 

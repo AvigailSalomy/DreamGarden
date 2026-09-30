@@ -17,6 +17,7 @@ import { MazeIntroScene } from "../scenes/MazeIntroScene";
 import { GardenMazeScene } from "../scenes/GardenMazeScene";
 import { VisualSliceScene } from "../scenes/VisualSliceScene";
 import { FrostedValleyScene } from "../scenes/FrostedValleyScene";
+import { FrostedMenuScene } from "../scenes/FrostedMenuScene";
 import { FrostedMazeScene } from "../scenes/FrostedMazeScene";
 import { FrostedRequestScene } from "../scenes/FrostedRequestScene";
 import { FrostedLetterScene } from "../scenes/FrostedLetterScene";
@@ -90,6 +91,7 @@ export function startGame(): Phaser.Game {
       VisualSliceScene, // isolated art-direction prototype, reached only via ?slice (see BootScene)
       // ---- Frosted Valley (World 2) ----
       FrostedValleyScene,
+      FrostedMenuScene,
       FrostedMazeScene, // Frosted Valley's own maze (was a second "GardenMaze")
       FrostedRequestScene,
       FrostedLetterScene,
