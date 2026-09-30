@@ -32,6 +32,8 @@ export interface StoryHost {
   showHint(x: number, y: number, message: string): void;
   /** Pan to the Winter Market, open it, and resolve once the player has closed it again. */
   guideToShop(): Promise<void>;
+  /** Gently pan so this (world-space) area is comfortably on screen — framed with `companion` when both fit. */
+  bringIntoView(area: Phaser.Geom.Rectangle, companion?: Phaser.GameObjects.Image): Promise<void>;
 }
 
 /**
@@ -318,6 +320,9 @@ export class FrostedStoryDirector {
     scene.tweens.add({ targets: marker, angle: 20, duration: 1800, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
 
     this.highlight = { resourceKey: key, objs: [glow, marker] };
+    // make sure the player can actually SEE what to tap next (the requirement
+    // may sit at, or past, the edge of the view the camera settled on)
+    void this.host.bringIntoView(b, this.host.animalSprite(animalId));
   }
 
   private clearHighlight(): void {

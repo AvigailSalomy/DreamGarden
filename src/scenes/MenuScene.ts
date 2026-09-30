@@ -10,8 +10,17 @@ import { audio } from "../audio/AudioManager";
 
 /** The opening storybook screen: title, Continue / Start, Settings. */
 export class MenuScene extends Phaser.Scene {
+  /** Arrived from the "Garden restored" letter's Travel button: open Frosted Valley straight away. */
+  private travelToValley = false;
+
   constructor() {
     super("Menu");
+  }
+
+  init(data?: { openFrostedValley?: boolean }): void {
+    this.travelToValley = !!data?.openFrostedValley;
+    // Phaser keeps start data across restart() (relayout on resize): consume it once
+    if (data) delete data.openFrostedValley;
   }
 
   create(): void {
@@ -112,14 +121,7 @@ export class MenuScene extends Phaser.Scene {
       () => {
         audio.unlock();
         audio.playSfx("ui_click");
-        // Frosted Valley is an overlay on top of this menu. While it's open the
-        // menu must not take input — otherwise a tap on empty snow falls
-        // through to the Continue/New Garden buttons underneath.
-        this.input.enabled = false;
-        this.scene.launch("FrostedValley");
-        this.scene.get("FrostedValley").events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-          if (this.sys.isActive()) this.input.enabled = true;
-        });
+        this.openFrostedValley("Loading Frosted Valley…");
       },
       { hitW: 56, hitH: 56 },
     );
@@ -128,6 +130,11 @@ export class MenuScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
       this.scale.off(Phaser.Scale.Events.RESIZE, this.relayout, this),
     );
+
+    if (this.travelToValley) {
+      this.travelToValley = false;
+      this.openFrostedValley("Traveling to Frosted Valley…", true);
+    }
 
     if (import.meta.env.DEV) {
       (window as unknown as Record<string, unknown>).__dgMenu = {
@@ -139,6 +146,37 @@ export class MenuScene extends Phaser.Scene {
         hasProgress: () => hasProgress(),
       };
     }
+  }
+
+  /**
+   * Open Frosted Valley as an overlay on top of this menu — from the ❄️ icon,
+   * or on arrival from the "Garden restored" letter. The valley itself decides
+   * locked preview vs. world (isFrostedValleyUnlocked). Its art loads on first
+   * open, so a soft veil shows right away until the valley's first frame.
+   */
+  private openFrostedValley(veilText: string, instant = false): void {
+    // Frosted Valley plays the same soundtrack as Dream Garden (one music
+    // system; startMusic is idempotent, so a theme already playing just continues)
+    audio.startMusic();
+    // While the valley is open the menu must not take input — otherwise a tap
+    // on empty snow falls through to the Continue/New Garden buttons underneath.
+    this.input.enabled = false;
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const veil = this.add.container(0, 0).setDepth(10000).setAlpha(instant ? 1 : 0);
+    veil.add(this.add.rectangle(0, 0, W, H, 0x14182c, 0.88).setOrigin(0, 0));
+    veil.add(this.add.text(W / 2, H / 2, `❄️  ${veilText}`, { ...bodyStyle(22, "#eef3fb"), align: "center" }).setOrigin(0.5));
+    // cached art opens in a frame or two — only fade the veil in if it's a real wait
+    if (!instant) this.tweens.add({ targets: veil, alpha: 1, delay: 120, duration: 220 });
+
+    const valley = this.scene.get("FrostedValley");
+    valley.events.once(Phaser.Scenes.Events.CREATE, () => veil.destroy());
+    valley.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (veil.active) veil.destroy();
+      if (this.sys.isActive()) this.input.enabled = true;
+    });
+    this.scene.launch("FrostedValley");
   }
 
   private relayout(): void {

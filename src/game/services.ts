@@ -30,6 +30,17 @@ export const shop = new ShopService(save, economy, progression, bus);
 export const frostedProgression = new FrostedValleyProgressionService(save, economy, bus, FROSTED_CATALOG);
 export const frostedShop = new FrostedShopService(save, economy, bus, FROSTED_SHOP_CATALOG);
 
+/**
+ * THE Frosted Valley unlock rule — the single source of truth: Dream Garden is
+ * fully completed, i.e. every Dream Garden animal rescued
+ * (`progression.isGardenComplete()` — all of CATALOG unlocked). Rescues are
+ * never undone within a playthrough, so once open the valley stays open; only
+ * "Start New Garden" (a brand-new playthrough) locks it again.
+ */
+export function isFrostedValleyUnlocked(): boolean {
+  return progression.isGardenComplete();
+}
+
 /** True when the player has anything worth continuing (unlocked objects, coins, or a puzzle in progress). */
 export function hasProgress(): boolean {
   const s = save.state;

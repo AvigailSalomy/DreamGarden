@@ -3,7 +3,7 @@ import { HORIZON, START_FOCUS, WORLD_HEIGHT, WORLD_WIDTH } from "../game/config"
 import { COLORS } from "../ui/theme";
 import { makeIconButton } from "../ui/hit";
 import { bus, progression, requests, save, shop } from "../game/services";
-import { CATALOG } from "../data/objects";
+import { CATALOG, GARDEN_COMPLETE_LETTER_ID } from "../data/objects";
 import { CameraController } from "../world/CameraController";
 import { GardenObjectView } from "../world/GardenObjectView";
 import { silhouetteTextureKey } from "../world/silhouette";
@@ -249,6 +249,18 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
         void this.presentLetterThenActivate(task.id);
         return;
       }
+      // a completed garden whose "Garden restored" letter was never read (e.g.
+      // the app closed mid-celebration): show it once now
+      if (this.gardenCompleteLetterPending()) {
+        void this.presentGardenCompleteLetter().then((travelled) => {
+          if (travelled) return;
+          this.camera.enable();
+          this.ui.setRevealing(false);
+          this.ui.setTaskFromProgression();
+          this.ui.showCard();
+        });
+        return;
+      }
       // plain continue
       this.camera.enable();
       this.ui.setRevealing(false);
@@ -361,6 +373,43 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.scene.pause();
   }
 
+  /** Dream Garden is complete but its one-time "Garden restored" letter hasn't been read yet. */
+  private gardenCompleteLetterPending(): boolean {
+    return progression.isGardenComplete() && !save.state.lettersSeen[GARDEN_COMPLETE_LETTER_ID];
+  }
+
+  /**
+   * The one-time "The Garden Is Restored!" letter (same Letter scene as every
+   * task letter; reading it records `lettersSeen.garden_complete`). Its button
+   * travels straight into the now-unlocked Frosted Valley; resolves true when it
+   * did (this scene is then shutting down), false if the letter was skipped.
+   */
+  private async presentGardenCompleteLetter(): Promise<boolean> {
+    if (this.scene.isActive("Letter") || this.scene.isSleeping("Letter")) {
+      this.scene.stop("Letter");
+      await wait(this, 40);
+    }
+    this.letterUp = true;
+    this.scene.launch("Letter", { objectId: GARDEN_COMPLETE_LETTER_ID });
+    const skipped = await new Promise<boolean>((res) => {
+      const off = bus.on("letter:done", (p) => {
+        if (p.objectId === GARDEN_COMPLETE_LETTER_ID) {
+          off();
+          res(!!p.skipped);
+        }
+      });
+    });
+    this.letterUp = false;
+    if (skipped) return false;
+
+    // → Main Menu, which opens Frosted Valley on arrival exactly as its ❄️ does
+    this.cameras.main.fadeOut(350, 20, 16, 30);
+    await wait(this, 360);
+    this.scene.stop("UI");
+    this.scene.start("Menu", { openFrostedValley: true });
+    return true;
+  }
+
   /** Guide the camera to a restoration's area, present its letter, then hand back control. */
   private async presentLetterThenActivate(objectId: string): Promise<void> {
     const def = progression.def(objectId);
@@ -436,6 +485,9 @@ export class GardenScene extends Phaser.Scene implements RevealHost {
     this.ui.refreshHabitatBar(); // no active animal left — the bar hides
     await this.camera.focusOn(1500, 1560, 1500, 0.9);
     await wait(this, 300);
+    // the sixth rescue just completed the garden: the one-time letter that
+    // opens Frosted Valley (its button travels straight there)
+    if (this.gardenCompleteLetterPending() && (await this.presentGardenCompleteLetter())) return;
     this.camera.enable();
     this.ui.setRevealing(false);
     this.ui.setTaskFromProgression();

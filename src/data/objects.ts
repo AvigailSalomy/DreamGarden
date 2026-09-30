@@ -1,4 +1,4 @@
-import type { GardenObjectDef } from "./types";
+import type { GardenObjectDef, LetterConfig } from "./types";
 
 /**
  * The unlockable catalog, ordered by `unlock_order`. Everything about an object —
@@ -486,3 +486,19 @@ export const DEER: GardenObjectDef = {
 };
 
 export const CATALOG: GardenObjectDef[] = [RABBIT, BIRD, HEDGEHOG, SQUIRREL, FOX, DEER];
+
+/**
+ * The one-time letter shown when the sixth and final animal is rescued and
+ * Dream Garden becomes complete. Shown through the same Letter scene as every
+ * task letter; its id doubles as the `lettersSeen` key that records it was read.
+ */
+export const GARDEN_COMPLETE_LETTER_ID = "garden_complete";
+export const GARDEN_COMPLETE_LETTER: LetterConfig = {
+  title: "The Garden Is Restored!",
+  body:
+    "You did it! Every corner of Dream Garden is blooming again.\n\n" +
+    "But your journey isn't over yet...\n" +
+    "Beyond the garden, a frozen valley is waiting for your help.",
+  highlight: "Frosted Valley is now unlocked!\u00a0❄️", // no-break space: the ❄️ never wraps alone
+  button: "Travel to Frosted Valley",
+};

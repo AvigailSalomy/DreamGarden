@@ -6,7 +6,7 @@ import { makeIconButton } from "../ui/hit";
 import { makePanel, makePill } from "../ui/Panel";
 import { titleStyle, bodyStyle, labelStyle } from "../ui/theme";
 import { safeInsets } from "../util/safeArea";
-import { economy, progression, frostedProgression, frostedShop } from "../game/services";
+import { economy, frostedProgression, frostedShop, isFrostedValleyUnlocked } from "../game/services";
 import { FROSTED_CATALOG } from "../data/frostedValley";
 import { FROSTED_SHOP_CATALOG } from "../data/frostedShop";
 import type { FrostedShopPlacement } from "../data/types";
@@ -22,8 +22,8 @@ import { FrostedAccessoryRig } from "../world/FrostedAccessoryRig";
  * Frosted Valley — a second, larger world built from the supplied production
  * art in public/assets/frosted/. Fully isolated: its own preload(), its own
  * world, no dependency on the main Garden catalog/economy/save systems.
- * Read-only dependency on `progression.isGardenComplete()` (already exists,
- * unmodified) gates entry behind the main Dream Garden's completion.
+ * Entry is gated by `isFrostedValleyUnlocked()` (game/services.ts — Dream
+ * Garden fully completed); until then only the locked preview is shown.
  *
  * SCALE SYSTEM: every prop's world size is driven by a target world-unit
  * HEIGHT (see NATIVE_H/target heights below), not by native PNG dimensions —
@@ -350,10 +350,7 @@ export class FrostedValleyScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.locked = !progression.isGardenComplete();
-    // TEMP TESTING ONLY — forces the world open regardless of Garden completion,
-    // so it can be inspected without a fake save. Revert before committing.
-    this.locked = false;
+    this.locked = !isFrostedValleyUnlocked();
     if (this.locked) {
       this.buildLockedPreview();
       return;
@@ -418,6 +415,7 @@ export class FrostedValleyScene extends Phaser.Scene {
       openPuzzle: (animalId) => this.openPuzzle(animalId),
       showHint: (x, y, message) => this.showHint(x, y, message),
       guideToShop: () => this.guideToShop(),
+      bringIntoView: (area, companion) => this.bringIntoView(area, companion),
     });
     // NOT widened yet here — the opening reveal's frameWide() establishing
     // shot uses this same minZoom, so widening it before the reveal plays
@@ -501,6 +499,12 @@ export class FrostedValleyScene extends Phaser.Scene {
 
   /* ================= LOCKED PREVIEW (world-select presentation) ================= */
 
+  /**
+   * Shown instead of the world until Dream Garden is complete: the real snowy
+   * valley art under a soft dark veil, gentle snowfall, the title, a lock and
+   * the unlock message. Nothing of the world itself is built, and any tap just
+   * closes back to the menu — the valley cannot be entered from here.
+   */
   private buildLockedPreview(): void {
     const W = this.scale.width;
     const H = this.scale.height;
@@ -508,65 +512,76 @@ export class FrostedValleyScene extends Phaser.Scene {
 
     const root = this.add.container(0, 0);
 
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x3a2f52, 0x2a2038, 0x1c2440, 0x14182c, 1);
-    bg.fillRect(0, 0, W, H);
-    root.add(bg);
+    // the valley's own painted snow ground, cover-fitted to the screen
+    const ground = this.add.image(cx, H / 2, "fv_glade_ground");
+    ground.setScale(Math.max(W / ground.width, H / ground.height));
+    root.add(ground);
 
+    // a small snowy vignette of the valley's landmarks
     const sceneScale = Math.min(W / 900, H / 1000);
-    const put = (key: string, x: number, y: number, scale: number, depth: number) =>
+    const put = (key: string, x: number, y: number, scale: number) =>
       root.add(
         this.add
-          .image(cx + x * sceneScale, H * 0.6 + y * sceneScale, key)
+          .image(cx + x * sceneScale, H * 0.66 + y * sceneScale, key)
           .setOrigin(0.5, 1)
-          .setScale(scale * sceneScale)
-          .setDepth(depth),
+          .setScale(scale * sceneScale),
       );
+    put("fv_pine", -380, -70, 0.6);
+    put("fv_pine", 400, -90, 0.65);
+    put("fv_magic_treehouse", -250, 30, 0.5);
+    put("fv_waterfall", 250, -30, 0.55);
+    put("fv_bridge", 40, 110, 0.5);
+    put("fv_fountain_restored", -40, 60, 0.5);
+    put("fv_crystal_a", 280, 100, 0.4);
+    put("fv_cottage_a", -330, 130, 0.55);
 
-    put("fv_pine", -280, -60, 0.55, 1);
-    put("fv_pine", 300, -90, 0.6, 1);
-    put("fv_magic_treehouse", -220, 40, 0.5, 2);
-    put("fv_waterfall", 230, -20, 0.55, 2);
-    put("fv_bridge", 40, 120, 0.5, 3);
-    put("fv_fountain_restored", -30, 60, 0.5, 4);
-    put("fv_crystal_a", 260, 100, 0.4, 3);
-    put("fv_cottage_a", -300, 130, 0.55, 4);
+    // subtle dark veil — deeper at the top and bottom so the text reads
+    const veil = this.add.graphics();
+    veil.fillGradientStyle(0x14182c, 0x14182c, 0x1c2440, 0x1c2440, 0.7, 0.7, 0.35, 0.35);
+    veil.fillRect(0, 0, W, H / 2);
+    veil.fillGradientStyle(0x1c2440, 0x1c2440, 0x14182c, 0x14182c, 0.35, 0.35, 0.72, 0.72);
+    veil.fillRect(0, H / 2, W, H / 2);
+    root.add(veil);
 
-    const dim = this.add.rectangle(0, 0, W, H, 0x0a0a18, 0.62).setOrigin(0, 0);
-    root.add(dim);
-
-    root.add(this.add.image(cx, H * 0.32, "fv_sparkle_trail").setScale(0.5).setAlpha(0.5));
-
+    const titleY = H * 0.2;
+    root.add(this.add.image(cx, titleY, "fv_sparkle_trail").setScale(0.5 * Math.max(0.7, sceneScale)).setAlpha(0.55));
     root.add(
       this.add
-        .text(cx, H * 0.4, "❄️ FROSTED VALLEY", { ...titleStyle(30), color: "#fef6e8", align: "center" })
-        .setOrigin(0.5),
+        .text(cx, titleY, "❄️ FROSTED VALLEY", { ...titleStyle(Math.round(Math.min(46, Math.max(30, W / 22)))), color: "#fef6e8", align: "center" })
+        .setOrigin(0.5)
+        .setShadow(0, 3, "rgba(10,12,30,0.6)", 8),
     );
 
-    const panelW = Math.min(W - 48, 380);
-    const lockPanel = makePanel(this, panelW, 150, { fill: 0x1c1a2e, edge: 0x4a4468 }).setPosition(cx, H * 0.58);
+    const panelW = Math.min(W - 48, 540);
+    const panelY = H * 0.56;
+    const lockPanel = makePanel(this, panelW, 170, { fill: 0x1c1a2e, edge: 0x6f86b8 }).setPosition(cx, panelY).setAlpha(0.92);
     root.add(lockPanel);
-    root.add(this.add.text(cx, H * 0.58 - 40, "🔒", { fontSize: "40px" }).setOrigin(0.5));
+    const lock = this.add.text(cx, panelY - 42, "🔒", { fontSize: "48px" }).setOrigin(0.5);
+    root.add(lock);
+    this.tweens.add({ targets: lock, y: lock.y - 5, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     root.add(
       this.add
-        .text(cx, H * 0.58 + 18, "Complete the previous\nGarden to unlock this one!", {
-          ...bodyStyle(17, "#fef6e8"),
+        .text(cx, panelY + 30, "Complete Dream Garden to unlock Frosted Valley!", {
+          ...bodyStyle(19, "#fef6e8"),
           align: "center",
           lineSpacing: 6,
+          wordWrap: { width: panelW - 56 },
         })
         .setOrigin(0.5),
     );
 
     root.add(
-      this.add.text(cx, H - safeInsets().bottom - 40, "TAP to Close", bodyStyle(15, "#c9c2d8")).setOrigin(0.5),
+      this.add.text(cx, H - safeInsets().bottom - 40, "TAP to Close", bodyStyle(15, "#dfe6f5")).setOrigin(0.5),
     );
 
+    // tapping anywhere only closes — it can never start the world
     const scrim = this.add.rectangle(0, 0, W, H, 0xffffff, 0.001).setOrigin(0, 0).setInteractive();
     scrim.on("pointerup", () => this.close());
     root.add(scrim);
 
     root.setAlpha(0);
     this.tweens.add({ targets: root, alpha: 1, duration: 260 });
+    this.buildSnowfall();
   }
 
   /* ================= opening camera reveal ================= */
@@ -1365,6 +1380,35 @@ export class FrostedValleyScene extends Phaser.Scene {
     Sfx.sparkle();
     this.scene.pause();
     this.scene.launch("FrostedPuzzle", { animalId });
+  }
+
+  /**
+   * A story-highlighted requirement must be clearly visible: if it isn't
+   * comfortably inside the view (clear of the HUD edges), pan — keeping the
+   * current zoom — to frame it together with the animal when both fit, or
+   * centred on it otherwise. Already visible: the camera doesn't move.
+   */
+  private async bringIntoView(area: Phaser.Geom.Rectangle, companion?: Phaser.GameObjects.Image): Promise<void> {
+    const view = this.cameras.main.worldView;
+    const mx = view.width * 0.14;
+    const my = view.height * 0.16;
+    const comfortably =
+      area.x >= view.x + mx && area.right <= view.right - mx && area.y >= view.y + my && area.bottom <= view.bottom - my;
+    if (comfortably) return;
+    let x = area.centerX;
+    let y = area.centerY;
+    if (companion?.active) {
+      const c = companion.getBounds();
+      const left = Math.min(c.x, area.x);
+      const right = Math.max(c.right, area.right);
+      const top = Math.min(c.y, area.y);
+      const bottom = Math.max(c.bottom, area.bottom);
+      if (right - left <= view.width - 2 * mx && bottom - top <= view.height - 2 * my) {
+        x = (left + right) / 2;
+        y = (top + bottom) / 2;
+      }
+    }
+    await this.camera.focusOn(x, y, 900);
   }
 
   /**

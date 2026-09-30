@@ -50,6 +50,10 @@ export interface PuzzleConfig {
 export interface LetterConfig {
   body: string;
   button?: string;
+  /** Optional heading above the body (the Garden-complete letter). */
+  title?: string;
+  /** Optional emphasised closing line under the body (the Garden-complete letter). */
+  highlight?: string;
 }
 
 /**

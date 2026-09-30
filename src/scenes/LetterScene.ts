@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { bodyStyle } from "../ui/theme";
+import { bodyStyle, titleStyle } from "../ui/theme";
 import { Button } from "../ui/Button";
 import { makeIconButton } from "../ui/hit";
 import { safeInsets } from "../util/safeArea";
@@ -7,6 +7,8 @@ import { bus, progression, save } from "../game/services";
 import { Sfx } from "../fx/Sfx";
 import { sparkleBurst } from "../fx/Particles";
 import { audio } from "../audio/AudioManager";
+import { GARDEN_COMPLETE_LETTER, GARDEN_COMPLETE_LETTER_ID } from "../data/objects";
+import type { LetterConfig } from "../data/types";
 
 interface LetterInit {
   objectId: string;
@@ -30,6 +32,8 @@ export class LetterScene extends Phaser.Scene {
   private objectId!: string;
   private bodyText = "";
   private buttonLabel = "Continue";
+  private titleText?: string;
+  private highlightText?: string;
   private opened = false;
   private done = false;
   private root!: Phaser.GameObjects.Container;
@@ -53,13 +57,17 @@ export class LetterScene extends Phaser.Scene {
       if (activeLetter === this) activeLetter = null;
     });
 
-    const def = progression.def(this.objectId);
-    if (!def) {
+    // a task's own letter, or the one-time "Garden restored" letter
+    const letter: LetterConfig | undefined =
+      this.objectId === GARDEN_COMPLETE_LETTER_ID ? GARDEN_COMPLETE_LETTER : progression.def(this.objectId)?.letter;
+    if (!letter) {
       this.finish();
       return;
     }
-    this.bodyText = def.letter.body;
-    this.buttonLabel = def.letter.button ?? "Continue";
+    this.bodyText = letter.body;
+    this.buttonLabel = letter.button ?? "Continue";
+    this.titleText = letter.title;
+    this.highlightText = letter.highlight;
 
     const W = this.scale.width;
     const H = this.scale.height;
@@ -138,7 +146,7 @@ export class LetterScene extends Phaser.Scene {
     this.envelope.on("pointerdown", () => this.open());
 
     const inset = safeInsets();
-    makeIconButton(this, W - inset.right - 42, inset.top + 26, "Skip ›", 19, () => this.finish(), {
+    makeIconButton(this, W - inset.right - 42, inset.top + 26, "Skip ›", 19, () => this.finish(true), {
       color: "#fef6e8",
       hitW: 108,
       hitH: 52,
@@ -152,7 +160,7 @@ export class LetterScene extends Phaser.Scene {
   /** DEV/test hook: one step (open, then finish). */
   advance(): void {
     if (!this.opened) this.open();
-    else this.finish();
+    else this.finish(false);
   }
 
   private open(): void {
@@ -208,32 +216,57 @@ export class LetterScene extends Phaser.Scene {
       ease: "Back.easeOut",
     });
 
-    const note = this.add
-      .text(cx, cy - 26, this.bodyText, {
-        ...bodyStyle(Math.min(20, W * 0.043), "#5b4636"),
-        align: "center",
-        lineSpacing: 8,
-        wordWrap: { width: Math.min(W - 116, 372) },
-      })
-      .setOrigin(0.5)
-      .setDepth(3)
-      .setAlpha(0);
-    this.root.add(note);
-    this.tweens.add({ targets: note, alpha: 1, delay: 520, duration: 320 });
+    const wrap = Math.min(W - 116, 372);
+    const texts: Phaser.GameObjects.Text[] = [];
+    const extras = !!(this.titleText || this.highlightText);
+    if (this.titleText) {
+      texts.push(
+        this.add
+          .text(cx, 0, this.titleText, { ...titleStyle(Math.min(28, W * 0.062)), color: "#7a4d12", align: "center", wordWrap: { width: wrap } })
+          .setOrigin(0.5, 0),
+      );
+    }
+    texts.push(
+      this.add
+        .text(cx, 0, this.bodyText, {
+          ...bodyStyle(extras ? Math.min(18, W * 0.04) : Math.min(20, W * 0.043), "#5b4636"),
+          align: "center",
+          lineSpacing: extras ? 5 : 8,
+          wordWrap: { width: wrap },
+        })
+        .setOrigin(0.5, 0),
+    );
+    if (this.highlightText) {
+      texts.push(
+        this.add
+          .text(cx, 0, this.highlightText, { ...titleStyle(Math.min(21, W * 0.048)), color: "#3d6f99", align: "center", wordWrap: { width: wrap } })
+          .setOrigin(0.5, 0),
+      );
+    }
+    // stack them, centred on the same spot the single note always used
+    const gap = 14;
+    const total = texts.reduce((h, t) => h + t.height, 0) + gap * (texts.length - 1);
+    let y = cy - 26 - total / 2;
+    for (const t of texts) {
+      t.setY(y).setDepth(3).setAlpha(0);
+      y += t.height + gap;
+      this.root.add(t);
+    }
+    this.tweens.add({ targets: texts, alpha: 1, delay: 520, duration: 320 });
 
     const btn = new Button(this, cx, cy + paperH / 2 - 64, {
-      width: Math.min(300, W - 140),
+      width: Math.min(this.buttonLabel.length > 16 ? 360 : 300, W - 100),
       height: 74,
       label: this.buttonLabel,
       fontSize: 24,
-      onClick: () => this.finish(),
+      onClick: () => this.finish(false),
     });
     btn.setAlpha(0).setDepth(4);
     this.root.add(btn);
     this.tweens.add({ targets: btn, alpha: 1, delay: 620, duration: 300 });
   }
 
-  private finish(): void {
+  private finish(skipped = false): void {
     if (this.done) return;
     this.done = true;
     audio.playSfx("ui_click");
@@ -241,7 +274,7 @@ export class LetterScene extends Phaser.Scene {
     save.saveNow();
 
     const emit = () => {
-      bus.emit("letter:done", { objectId: this.objectId });
+      bus.emit("letter:done", { objectId: this.objectId, skipped });
       this.scene.stop();
     };
     if (this.root) {

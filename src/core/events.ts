@@ -15,7 +15,8 @@ export interface GameEvents {
   "object:unlock": { objectId: string };
   "reveal:coins": { worldX: number; worldY: number; amount: number };
   "reveal:done": { objectId: string };
-  "letter:done": { objectId: string };
+  /** `skipped`: closed with "Skip ›" rather than the letter's own button. */
+  "letter:done": { objectId: string; skipped?: boolean };
   "task:changed": { objectId: string | null };
   "coins:changed": { total: number; delta: number; reason: string };
   "requests:open": { objectId: string };
